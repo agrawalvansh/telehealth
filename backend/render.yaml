@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: telehealth-backend
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: DATABASE_URL
+        fromDatabase:
+          name: telehealth-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: AGORA_APP_ID
+        sync: false
+      - key: AGORA_APP_CERTIFICATE
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+
+databases:
+  - name: telehealth-db
+    databaseName: telehealth
+    user: telehealth_user
