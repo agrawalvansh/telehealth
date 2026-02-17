@@ -98,3 +98,9 @@ export const healthArticlesAPI = {
     getAll: (category?: string) => api.get('/health-articles', { params: { category } }),
     getById: (id: string) => api.get(`/health-articles/${id}`),
 };
+
+export const searchAPI = {
+    searchPatients: (query: string) => api.get('/search/patients', { params: { q: query } }),
+    getPatientOverview: (patientId: string) => api.get(`/search/patients/${patientId}/overview`),
+};
+

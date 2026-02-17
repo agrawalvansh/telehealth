@@ -12,14 +12,14 @@ const router = express.Router();
  *     tags: [Doctors]
  */
 router.get('/', async (req, res: Response) => {
-    const { specialization, search } = req.query;
+    const { specialization, search, language } = req.query;
 
     try {
         let query = `
       SELECT u.id, u.first_name, u.last_name, u.email, u.phone,
              dp.specialization, dp.qualification, dp.experience_years,
              dp.hospital_name, dp.bio, dp.consultation_fee, dp.rating,
-             dp.total_consultations
+             dp.total_consultations, dp.preferred_languages
       FROM users u
       JOIN doctor_profiles dp ON u.id = dp.user_id
       WHERE u.role = 'doctor' AND u.is_approved = true AND u.is_active = true
@@ -37,6 +37,12 @@ router.get('/', async (req, res: Response) => {
         if (search) {
             query += ` AND (u.first_name ILIKE $${paramCount} OR u.last_name ILIKE $${paramCount} OR dp.specialization ILIKE $${paramCount})`;
             params.push(`%${search}%`);
+            paramCount++;
+        }
+
+        if (language) {
+            query += ` AND dp.preferred_languages ILIKE $${paramCount}`;
+            params.push(`%${language}%`);
             paramCount++;
         }
 
@@ -63,7 +69,8 @@ router.get('/:id', async (req, res: Response) => {
             `SELECT u.id, u.first_name, u.last_name, u.email, u.phone,
               dp.specialization, dp.qualification, dp.experience_years,
               dp.hospital_name, dp.hospital_address, dp.bio, 
-              dp.consultation_fee, dp.rating, dp.total_consultations
+              dp.consultation_fee, dp.rating, dp.total_consultations,
+              dp.preferred_languages
        FROM users u
        JOIN doctor_profiles dp ON u.id = dp.user_id
        WHERE u.id = $1 AND u.role = 'doctor' AND u.is_approved = true`,
@@ -123,7 +130,8 @@ router.get('/me/profile', async (req: AuthRequest, res: Response) => {
             `SELECT u.id, u.email, u.first_name, u.last_name, u.phone, u.is_approved,
               dp.specialization, dp.qualification, dp.experience_years,
               dp.hospital_name, dp.hospital_address, dp.registration_number,
-              dp.bio, dp.consultation_fee, dp.rating, dp.total_consultations
+              dp.bio, dp.consultation_fee, dp.rating, dp.total_consultations,
+              dp.preferred_languages
        FROM users u
        JOIN doctor_profiles dp ON u.id = dp.user_id
        WHERE u.id = $1`,
@@ -163,6 +171,7 @@ router.put('/me/profile', async (req: AuthRequest, res: Response) => {
         registrationNumber,
         bio,
         consultationFee,
+        preferredLanguages,
     } = req.body;
 
     try {
@@ -186,8 +195,9 @@ router.put('/me/profile', async (req: AuthRequest, res: Response) => {
            hospital_address = COALESCE($5, hospital_address),
            registration_number = COALESCE($6, registration_number),
            bio = COALESCE($7, bio),
-           consultation_fee = COALESCE($8, consultation_fee)
-       WHERE user_id = $9`,
+           consultation_fee = COALESCE($8, consultation_fee),
+           preferred_languages = COALESCE($9, preferred_languages)
+       WHERE user_id = $10`,
             [
                 specialization,
                 qualification,
@@ -197,6 +207,7 @@ router.put('/me/profile', async (req: AuthRequest, res: Response) => {
                 registrationNumber,
                 bio,
                 consultationFee,
+                preferredLanguages,
                 req.user!.id,
             ]
         );

@@ -160,3 +160,18 @@ CREATE TRIGGER update_medical_records_updated_at BEFORE UPDATE ON medical_record
 
 CREATE TRIGGER update_health_articles_updated_at BEFORE UPDATE ON health_articles
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Audit logs table for tracking patient searches and overview access
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    action VARCHAR(100) NOT NULL, -- e.g., 'PATIENT_SEARCH', 'PATIENT_OVERVIEW_ACCESS'
+    details JSONB, -- Store additional metadata
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create index for audit logs
+CREATE INDEX idx_audit_logs_user ON audit_logs(user_id);
+CREATE INDEX idx_audit_logs_action ON audit_logs(action);
+CREATE INDEX idx_audit_logs_created ON audit_logs(created_at);
+

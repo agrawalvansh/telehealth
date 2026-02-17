@@ -83,13 +83,20 @@ export default function DoctorAppointmentsPage() {
     }
 
     const todayAppointments = appointments.filter((a) => {
-        const today = new Date().toISOString().split('T')[0];
-        return a.appointment_date.split('T')[0] === today && a.status === 'scheduled';
+        const today = new Date();
+        const appointmentDate = new Date(a.appointment_date);
+
+        // Show appointments from past 24 hours and future appointments with scheduled status
+        const hoursDiff = (today.getTime() - appointmentDate.getTime()) / (1000 * 60 * 60);
+        return hoursDiff <= 24 && hoursDiff >= -24 && a.status === 'scheduled';
     });
 
     const upcomingAppointments = appointments.filter((a) => {
-        const today = new Date().toISOString().split('T')[0];
-        return a.appointment_date.split('T')[0] > today && a.status === 'scheduled';
+        const today = new Date();
+        const appointmentDate = new Date(a.appointment_date);
+        const daysDiff = (appointmentDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24);
+
+        return daysDiff > 1 && a.status === 'scheduled';
     });
 
     return (

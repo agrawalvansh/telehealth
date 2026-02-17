@@ -11,6 +11,7 @@ import appointmentRoutes from './routes/appointments';
 import adminRoutes from './routes/admin';
 import videoRoutes from './routes/video';
 import healthArticlesRoutes from './routes/healthArticles';
+import searchRoutes from './routes/search';
 
 // Load environment variables
 dotenv.config();
@@ -49,6 +50,7 @@ app.use('/api/appointments', appointmentRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/video', videoRoutes);
 app.use('/api/health-articles', healthArticlesRoutes);
+app.use('/api/search', searchRoutes);
 
 // Setup Swagger documentation
 setupSwagger(app);

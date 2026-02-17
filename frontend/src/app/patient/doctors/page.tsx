@@ -14,6 +14,7 @@ export default function DoctorsPage() {
     const [filteredDoctors, setFilteredDoctors] = useState<any[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedSpecialty, setSelectedSpecialty] = useState('');
+    const [selectedLanguage, setSelectedLanguage] = useState('');
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -52,10 +53,21 @@ export default function DoctorsPage() {
             filtered = filtered.filter((doc) => doc.specialization === selectedSpecialty);
         }
 
+        if (selectedLanguage) {
+            filtered = filtered.filter((doc) =>
+                doc.preferred_languages?.toLowerCase().includes(selectedLanguage.toLowerCase())
+            );
+        }
+
         setFilteredDoctors(filtered);
-    }, [searchTerm, selectedSpecialty, doctors]);
+    }, [searchTerm, selectedSpecialty, selectedLanguage, doctors]);
 
     const specialties = [...new Set(doctors.map((doc) => doc.specialization))];
+    const allLanguages = [...new Set(
+        doctors
+            .filter(doc => doc.preferred_languages)
+            .flatMap(doc => doc.preferred_languages.split(',').map((l: string) => l.trim()))
+    )].sort();
 
     if (loading) {
         return (
@@ -118,6 +130,25 @@ export default function DoctorsPage() {
                                 ))}
                             </select>
                         </div>
+
+                        {/* Language Filter */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Filter by Language
+                            </label>
+                            <select
+                                className="input"
+                                value={selectedLanguage}
+                                onChange={(e) => setSelectedLanguage(e.target.value)}
+                            >
+                                <option value="">All Languages</option>
+                                {allLanguages.map((language) => (
+                                    <option key={language} value={language}>
+                                        {language}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
                 </div>
 
@@ -164,6 +195,20 @@ export default function DoctorsPage() {
                                     <div className="text-sm text-gray-600">
                                         <strong>Fee:</strong> ₹{doctor.consultation_fee}
                                     </div>
+                                    {doctor.preferred_languages && (
+                                        <div className="mt-2">
+                                            <div className="flex flex-wrap gap-1">
+                                                {doctor.preferred_languages.split(',').map((lang: string, index: number) => (
+                                                    <span
+                                                        key={index}
+                                                        className="inline-block px-2 py-1 bg-blue-50 text-blue-700 text-xs font-medium rounded"
+                                                    >
+                                                        🗣️ {lang.trim()}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {doctor.bio && (

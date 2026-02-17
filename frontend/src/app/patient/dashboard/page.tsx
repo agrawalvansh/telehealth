@@ -116,9 +116,9 @@ export default function PatientDashboard() {
                                         </div>
                                         <div className="text-right">
                                             <span className={`badge ${appointment.status === 'scheduled' ? 'badge-info' :
-                                                    appointment.status === 'completed' ? 'badge-success' :
-                                                        appointment.status === 'cancelled' ? 'badge-danger' :
-                                                            'badge-warning'
+                                                appointment.status === 'completed' ? 'badge-success' :
+                                                    appointment.status === 'cancelled' ? 'badge-danger' :
+                                                        'badge-warning'
                                                 }`}>
                                                 {appointment.status}
                                             </span>

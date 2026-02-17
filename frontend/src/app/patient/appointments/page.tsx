@@ -60,7 +60,8 @@ export default function AppointmentsPage() {
         const timeDiff = Math.abs(now.getTime() - appointmentDateTime.getTime());
         const minutesDiff = Math.floor(timeDiff / (1000 * 60));
 
-        return minutesDiff <= 15;
+        // Extended to 2 hours window for easier testing
+        return minutesDiff <= 120; // Was 15 minutes, now 2 hours
     };
 
     if (activeCall) {

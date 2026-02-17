@@ -6,6 +6,7 @@ import { useAuthStore } from '@/lib/auth';
 import { doctorAPI } from '@/lib/api';
 import { FaCalendarAlt, FaUsers, FaCheckCircle, FaClock } from 'react-icons/fa';
 import Link from 'next/link';
+import GlobalSearch from '@/components/GlobalSearch';
 
 export default function DoctorDashboard() {
     const router = useRouter();
@@ -61,6 +62,7 @@ export default function DoctorDashboard() {
                     <div className="flex items-center justify-between">
                         <h1 className="text-2xl font-bold gradient-text">Doctor Dashboard</h1>
                         <div className="flex items-center space-x-4">
+                            <GlobalSearch />
                             <span className="text-gray-600">Dr. {user?.firstName} {user?.lastName}</span>
                             <button
                                 onClick={() => useAuthStore.getState().logout()}
@@ -137,9 +139,9 @@ export default function DoctorDashboard() {
                                             </p>
                                         </div>
                                         <span className={`badge ${appointment.status === 'scheduled' ? 'badge-info' :
-                                                appointment.status === 'completed' ? 'badge-success' :
-                                                    appointment.status === 'cancelled' ? 'badge-danger' :
-                                                        'badge-warning'
+                                            appointment.status === 'completed' ? 'badge-success' :
+                                                appointment.status === 'cancelled' ? 'badge-danger' :
+                                                    'badge-warning'
                                             }`}>
                                             {appointment.status}
                                         </span>

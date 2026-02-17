@@ -8,7 +8,7 @@ A **complete, production-grade Cloud-Based Telehealth Support System** with:
 - ✅ **40+ API endpoints** with Swagger documentation
 - ✅ **16 pages** covering all user workflows
 - ✅ **Video calling** via Agora SDK
-- ✅ **Seed data** with demo accounts ready
+- ✅ **Seed data** with dem![](image.png)o accounts ready
 - ✅ **Responsive UI** with modern design
 
 ---

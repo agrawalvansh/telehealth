@@ -22,6 +22,7 @@ export default function DoctorProfilePage() {
         registrationNumber: '',
         bio: '',
         consultationFee: '',
+        preferredLanguages: '',
     });
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -51,6 +52,7 @@ export default function DoctorProfilePage() {
                 registrationNumber: profile.registration_number || '',
                 bio: profile.bio || '',
                 consultationFee: profile.consultation_fee || '',
+                preferredLanguages: profile.preferred_languages || '',
             });
         } catch (error) {
             console.error('Error fetching profile:', error);
@@ -226,6 +228,46 @@ export default function DoctorProfilePage() {
                             placeholder="Tell patients about yourself and your expertise..."
                             value={formData.bio}
                             onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Preferred Languages</label>
+                        <p className="text-xs text-gray-500 mb-3">Select all languages you can communicate in (comma-separated)</p>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                            {['English', 'Hindi', 'Bengali', 'Telugu', 'Marathi', 'Tamil', 'Gujarati', 'Urdu', 'Kannada', 'Odia', 'Malayalam', 'Punjabi'].map((lang) => {
+                                const isSelected = formData.preferredLanguages.split(',').map(l => l.trim()).includes(lang);
+                                return (
+                                    <label key={lang} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-2 rounded">
+                                        <input
+                                            type="checkbox"
+                                            className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                            checked={isSelected}
+                                            onChange={(e) => {
+                                                const languages = formData.preferredLanguages
+                                                    .split(',')
+                                                    .map(l => l.trim())
+                                                    .filter(l => l !== '');
+                                                if (e.target.checked) {
+                                                    languages.push(lang);
+                                                } else {
+                                                    const index = languages.indexOf(lang);
+                                                    if (index > -1) languages.splice(index, 1);
+                                                }
+                                                setFormData({ ...formData, preferredLanguages: languages.join(', ') });
+                                            }}
+                                        />
+                                        <span className="text-sm text-gray-700">{lang}</span>
+                                    </label>
+                                );
+                            })}
+                        </div>
+                        <input
+                            type="text"
+                            className="input mt-3"
+                            placeholder="Or type custom languages (comma-separated)"
+                            value={formData.preferredLanguages}
+                            onChange={(e) => setFormData({ ...formData, preferredLanguages: e.target.value })}
                         />
                     </div>
 
