@@ -57,25 +57,30 @@ export const useAuthStore = create<AuthState>()(
 if (typeof window !== 'undefined') {
     const restoreSession = async () => {
         try {
-            // Using a dynamic import or assuming API will work with the cookie
-            // We'll call the /me endpoint directly using fetch to avoid circular deps if they exist
+            const token = localStorage.getItem('token');
+            if (!token) {
+                // No token stored, nothing to restore
+                return;
+            }
+
             const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
             const response = await fetch(`${API_URL}/api/auth/me`, {
                 headers: {
                     'Accept': 'application/json',
+                    'Authorization': `Bearer ${token}`,
                 },
-                // Include cookies
                 credentials: 'include'
             });
 
             if (response.ok) {
                 const user = await response.json();
-                useAuthStore.setState({ user, isAuthenticated: true });
+                useAuthStore.setState({ user, token, isAuthenticated: true });
                 console.log('Session restored successfully');
             } else {
-                // If not authorized, clear legacy localStorage
+                // Token is invalid/expired, clear it
                 localStorage.removeItem('token');
                 localStorage.removeItem('user');
+                useAuthStore.setState({ user: null, token: null, isAuthenticated: false });
             }
         } catch (error) {
             console.error('Error restoring session:', error);
