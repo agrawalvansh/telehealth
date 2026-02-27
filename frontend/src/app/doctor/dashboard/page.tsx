@@ -10,7 +10,8 @@ import { FaCalendarAlt, FaUsers, FaCheckCircle, FaClock, FaVideo } from 'react-i
 import Link from 'next/link';
 import GlobalSearch from '@/components/GlobalSearch';
 import { initSocket, disconnectSocket } from '@/lib/socket';
-import VideoCall from '@/components/VideoCall';
+import dynamic from 'next/dynamic';
+const VideoCall = dynamic(() => import('@/components/VideoCall'), { ssr: false });
 
 const canJoinCall = (appointment: any) => {
     if (appointment.status !== 'scheduled' && appointment.status !== 'in_progress') return false;

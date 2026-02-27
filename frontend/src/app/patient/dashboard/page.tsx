@@ -9,7 +9,8 @@ import { patientAPI, appointmentAPI } from '@/lib/api';
 import { FaCalendarAlt, FaUserMd, FaFileMedical, FaVideo, FaCheckCircle } from 'react-icons/fa';
 import Link from 'next/link';
 import { initSocket, disconnectSocket } from '@/lib/socket';
-import VideoCall from '@/components/VideoCall';
+import nextDynamic from 'next/dynamic';
+const VideoCall = nextDynamic(() => import('@/components/VideoCall'), { ssr: false });
 
 export default function PatientDashboard() {
     const router = useRouter();

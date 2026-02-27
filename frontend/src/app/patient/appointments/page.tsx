@@ -8,7 +8,8 @@ import { useAuthStore } from '@/lib/auth';
 import { patientAPI, appointmentAPI } from '@/lib/api';
 import { FaCalendarAlt, FaVideo, FaTimes, FaEdit } from 'react-icons/fa';
 import Link from 'next/link';
-import VideoCall from '@/components/VideoCall';
+import nextDynamic from 'next/dynamic';
+const VideoCall = nextDynamic(() => import('@/components/VideoCall'), { ssr: false });
 import { initSocket, disconnectSocket } from '@/lib/socket';
 
 export default function AppointmentsPage() {

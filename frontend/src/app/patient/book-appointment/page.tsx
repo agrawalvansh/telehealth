@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/lib/auth';
 import { doctorAPI, appointmentAPI } from '@/lib/api';
@@ -10,7 +10,7 @@ import { FaCalendarAlt, FaClock, FaUserMd } from 'react-icons/fa';
 import Link from 'next/link';
 import { initSocket, disconnectSocket } from '@/lib/socket';
 
-export default function BookAppointmentPage() {
+function BookAppointmentContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const doctorId = searchParams.get('doctorId');
@@ -313,5 +313,13 @@ export default function BookAppointmentPage() {
                 </div>
             </div>
         </div>
+    );
+}
+
+export default function BookAppointmentPage() {
+    return (
+        <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="loading-spinner"></div></div>}>
+            <BookAppointmentContent />
+        </Suspense>
     );
 }

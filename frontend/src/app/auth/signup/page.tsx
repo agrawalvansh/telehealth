@@ -2,14 +2,14 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { FaHeartbeat, FaEnvelope, FaLock, FaUser, FaPhone } from 'react-icons/fa';
 import { authAPI } from '@/lib/api';
 import { useAuthStore } from '@/lib/auth';
 
-export default function SignupPage() {
+function SignupForm() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const defaultRole = searchParams.get('role') || 'patient';
@@ -235,5 +235,13 @@ export default function SignupPage() {
                 </div>
             </div>
         </div>
+    );
+}
+
+export default function SignupPage() {
+    return (
+        <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="loading-spinner"></div></div>}>
+            <SignupForm />
+        </Suspense>
     );
 }
