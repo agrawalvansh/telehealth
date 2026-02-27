@@ -8,8 +8,8 @@ import { useAuthStore } from '@/lib/auth';
 import { doctorAPI, appointmentAPI } from '@/lib/api';
 import { FaCalendarAlt, FaVideo, FaFileMedical } from 'react-icons/fa';
 import Link from 'next/link';
-import dynamic from 'next/dynamic';
-const VideoCall = dynamic(() => import('@/components/VideoCall'), { ssr: false });
+import nextDynamic from 'next/dynamic';
+const VideoCall = nextDynamic(() => import('@/components/VideoCall'), { ssr: false });
 import { initSocket, disconnectSocket } from '@/lib/socket';
 
 const canJoinCall = (appointment: any) => {
