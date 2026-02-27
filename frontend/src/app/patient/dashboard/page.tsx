@@ -4,21 +4,65 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/auth';
 import { patientAPI, appointmentAPI } from '@/lib/api';
-import { FaCalendarAlt, FaUserMd, FaFileMedical, FaVideo } from 'react-icons/fa';
+import { FaCalendarAlt, FaUserMd, FaFileMedical, FaVideo, FaCheckCircle } from 'react-icons/fa';
 import Link from 'next/link';
+import { initSocket, disconnectSocket } from '@/lib/socket';
+import VideoCall from '@/components/VideoCall';
 
 export default function PatientDashboard() {
     const router = useRouter();
-    const { user, isAuthenticated } = useAuthStore();
+    const { user, isAuthenticated, isHydrated } = useAuthStore();
     const [appointments, setAppointments] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [activeCall, setActiveCall] = useState<string | null>(null);
 
     useEffect(() => {
+        if (!isHydrated) return;
+
         if (!isAuthenticated || user?.role !== 'patient') {
             router.push('/auth/login');
             return;
         }
         fetchAppointments();
+
+        // Socket integration
+        const socket = initSocket(user.id);
+
+        socket.on('appointment_created', (newAppt) => {
+            setAppointments(prev => {
+                const exists = prev.find(a => a.id === newAppt.id);
+                if (exists) return prev;
+                return [newAppt, ...prev]
+                    .filter(a => ['scheduled', 'in_progress'].includes(a.status))
+                    .sort((a, b) => new Date(`${a.appointment_date.split('T')[0]}T${a.start_time}`).getTime() -
+                        new Date(`${b.appointment_date.split('T')[0]}T${b.start_time}`).getTime())
+                    .slice(0, 5);
+            });
+        });
+
+        socket.on('appointment_updated', (updatedAppt) => {
+            setAppointments(prev => {
+                const newAppointments = prev.map(a => a.id === updatedAppt.id ? updatedAppt : a);
+                // If it was cancelled or completed, it might still stay in latest 5 or be filtered depending on view
+                // For dashboard, we usually show "Upcoming", so if status changed to cancelled/completed, we might want to refetch
+                // but let's just update for now. The filtering is done in the component if needed.
+                return newAppointments
+                    .filter(a => ['scheduled', 'in_progress'].includes(a.status))
+                    .sort((a, b) => new Date(`${a.appointment_date.split('T')[0]}T${a.start_time}`).getTime() -
+                        new Date(`${b.appointment_date.split('T')[0]}T${b.start_time}`).getTime())
+                    .slice(0, 5);
+            });
+            // Force refetch to ensure sorting and filtering are correct
+            fetchAppointments();
+        });
+
+        socket.on('appointment_deleted', ({ id }) => {
+            setAppointments(prev => prev.filter(a => a.id !== id));
+        });
+
+        return () => {
+            disconnectSocket();
+        };
     }, [isAuthenticated, user]);
 
     const fetchAppointments = async () => {
@@ -31,6 +75,19 @@ export default function PatientDashboard() {
             setLoading(false);
         }
     };
+
+    const handleMarkAttended = async (id: string) => {
+        try {
+            await appointmentAPI.markAttendance(id, true);
+        } catch (error) {
+            console.error('Error marking attendance:', error);
+            alert('Failed to mark attendance');
+        }
+    };
+
+    if (activeCall) {
+        return <VideoCall appointmentId={activeCall} onCallEnd={() => setActiveCall(null)} />;
+    }
 
     if (loading) {
         return (
@@ -118,16 +175,34 @@ export default function PatientDashboard() {
                                             <span className={`badge ${appointment.status === 'scheduled' ? 'badge-info' :
                                                 appointment.status === 'completed' ? 'badge-success' :
                                                     appointment.status === 'cancelled' ? 'badge-danger' :
-                                                        'badge-warning'
+                                                        appointment.status === 'missed' ? 'bg-orange-100 text-orange-700 border-orange-200' :
+                                                            'badge-warning'
                                                 }`}>
-                                                {appointment.status}
+                                                {appointment.status.charAt(0).toUpperCase() + appointment.status.slice(1)}
                                             </span>
-                                            {appointment.status === 'scheduled' && (
-                                                <button className="btn btn-primary btn-sm mt-2 flex items-center space-x-2">
-                                                    <FaVideo />
-                                                    <span>Join Call</span>
-                                                </button>
-                                            )}
+                                            <div className="flex flex-col space-y-2 mt-2">
+                                                {appointment.status === 'scheduled' && (
+                                                    <button
+                                                        onClick={() => setActiveCall(appointment.id)}
+                                                        className="btn btn-primary btn-sm flex items-center justify-center space-x-2"
+                                                    >
+                                                        <FaVideo />
+                                                        <span>Join Call</span>
+                                                    </button>
+                                                )}
+                                                {appointment.status === 'scheduled' && !appointment.patient_attended && (
+                                                    <button
+                                                        onClick={() => handleMarkAttended(appointment.id)}
+                                                        className="btn btn-outline btn-sm border-green-600 text-green-600 hover:bg-green-50 flex items-center justify-center space-x-2"
+                                                    >
+                                                        <FaCheckCircle />
+                                                        <span>Mark Attended</span>
+                                                    </button>
+                                                )}
+                                                {appointment.patient_attended && appointment.status !== 'completed' && (
+                                                    <span className="text-xs text-green-600 font-medium italic">Wait for doctor to mark attendance</span>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

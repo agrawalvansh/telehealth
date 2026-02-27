@@ -4,6 +4,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 const api = axios.create({
     baseURL: `${API_URL}/api`,
+    withCredentials: true,
     headers: {
         'Content-Type': 'application/json',
     },
@@ -65,6 +66,7 @@ export const doctorAPI = {
     deleteAvailability: (id: string) => api.delete(`/doctors/me/availability/${id}`),
     getPatientHistory: (patientId: string) => api.get(`/doctors/patient-history/${patientId}`),
     getAvailabilityById: (doctorId: string) => api.get(`/doctors/${doctorId}/availability`),
+    getBusySlots: (doctorId: string, date: string) => api.get(`/doctors/${doctorId}/busy-slots`, { params: { date } }),
 };
 
 export const appointmentAPI = {
@@ -74,6 +76,7 @@ export const appointmentAPI = {
     cancel: (id: string, reason: string) => api.post(`/appointments/${id}/cancel`, { reason }),
     reschedule: (id: string, data: any) => api.post(`/appointments/${id}/reschedule`, data),
     addMedicalRecord: (id: string, data: any) => api.post(`/appointments/${id}/medical-record`, data),
+    markAttendance: (id: string, attended: boolean) => api.patch(`/appointments/${id}/status`, { attended }),
 };
 
 export const adminAPI = {

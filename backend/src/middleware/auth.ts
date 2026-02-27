@@ -15,7 +15,11 @@ export const authenticateToken = (
     next: NextFunction
 ) => {
     const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+    let token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+
+    if (!token && req.cookies) {
+        token = req.cookies.token;
+    }
 
     if (!token) {
         return res.status(401).json({ error: 'Access token required' });

@@ -10,7 +10,10 @@ async function seed() {
         const adminResult = await pool.query(
             `INSERT INTO users (email, password_hash, role, first_name, last_name, is_approved, is_active)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
-       ON CONFLICT (email) DO NOTHING
+       ON CONFLICT (email) DO UPDATE SET 
+            password_hash = EXCLUDED.password_hash,
+            is_approved = EXCLUDED.is_approved,
+            is_active = EXCLUDED.is_active
        RETURNING id`,
             ['admin@telehealth.com', adminPassword, 'admin', 'System', 'Admin', true, true]
         );
@@ -75,6 +78,34 @@ async function seed() {
                 bio: 'Dermatologist with focus on skin conditions common in rural areas.',
                 consultationFee: 700,
             },
+            {
+                email: 'dr.singh@telehealth.com',
+                firstName: 'Vikram',
+                lastName: 'Singh',
+                phone: '+91-9876543214',
+                specialization: 'Neurologist',
+                qualification: 'MBBS, DM (Neurology)',
+                experienceYears: 20,
+                hospitalName: 'Medanta',
+                hospitalAddress: 'Gurugram, Haryana',
+                registrationNumber: 'MCI-56789',
+                bio: 'Specialist in neurological disorders with over 20 years of experience.',
+                consultationFee: 1000,
+            },
+            {
+                email: 'dr.verma@telehealth.com',
+                firstName: 'Anjali',
+                lastName: 'Verma',
+                phone: '+91-9876543215',
+                specialization: 'Gynecologist',
+                qualification: 'MBBS, MS (OBG)',
+                experienceYears: 14,
+                hospitalName: 'Cloudnine',
+                hospitalAddress: 'Mumbai, Maharashtra',
+                registrationNumber: 'MCI-67890',
+                bio: 'Dedicated to women’s health and wellness throughout all stages of life.',
+                consultationFee: 750,
+            }
         ];
 
         const doctorIds = [];
@@ -82,48 +113,62 @@ async function seed() {
             const password = await bcrypt.hash('doctor123', 10);
             const userResult = await pool.query(
                 `INSERT INTO users (email, password_hash, role, first_name, last_name, phone, is_approved, is_active)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         ON CONFLICT (email) DO NOTHING
-         RETURNING id`,
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                 ON CONFLICT (email) DO UPDATE SET 
+                    first_name = EXCLUDED.first_name,
+                    last_name = EXCLUDED.last_name,
+                    is_approved = EXCLUDED.is_approved,
+                    is_active = EXCLUDED.is_active
+                 RETURNING id`,
                 [doctor.email, password, 'doctor', doctor.firstName, doctor.lastName, doctor.phone, true, true]
             );
 
-            if (userResult.rows.length > 0) {
-                const doctorId = userResult.rows[0].id;
-                doctorIds.push(doctorId);
+            const doctorId = userResult.rows[0].id;
+            doctorIds.push(doctorId);
 
+            await pool.query(
+                `INSERT INTO doctor_profiles (user_id, specialization, qualification, experience_years, hospital_name, hospital_address, registration_number, bio, consultation_fee, rating, total_consultations, preferred_languages)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                 ON CONFLICT (user_id) DO UPDATE SET
+                    specialization = EXCLUDED.specialization,
+                    qualification = EXCLUDED.qualification,
+                    bio = EXCLUDED.bio,
+                    consultation_fee = EXCLUDED.consultation_fee,
+                    preferred_languages = EXCLUDED.preferred_languages`,
+                [
+                    doctorId,
+                    doctor.specialization,
+                    doctor.qualification,
+                    doctor.experienceYears,
+                    doctor.hospitalName,
+                    doctor.hospitalAddress,
+                    doctor.registrationNumber,
+                    doctor.bio,
+                    doctor.consultationFee,
+                    4.5 + Math.random() * 0.5,
+                    Math.floor(Math.random() * 100) + 50,
+                    'English, Hindi', // Default for seed
+                ]
+            );
+
+            // Add availability slots (Monday to Friday, 9 AM to 5 PM)
+            for (let day = 0; day <= 6; day++) { // Now weekly
                 await pool.query(
-                    `INSERT INTO doctor_profiles (user_id, specialization, qualification, experience_years, hospital_name, hospital_address, registration_number, bio, consultation_fee, rating, total_consultations)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-           ON CONFLICT (user_id) DO NOTHING`,
-                    [
-                        doctorId,
-                        doctor.specialization,
-                        doctor.qualification,
-                        doctor.experienceYears,
-                        doctor.hospitalName,
-                        doctor.hospitalAddress,
-                        doctor.registrationNumber,
-                        doctor.bio,
-                        doctor.consultationFee,
-                        4.5 + Math.random() * 0.5, // Random rating between 4.5-5.0
-                        Math.floor(Math.random() * 100) + 50, // Random consultations 50-150
-                    ]
+                    `INSERT INTO availability_slots (doctor_id, day_of_week, start_time, end_time, is_available)
+                     VALUES ($1, $2, $3, $4, $5)
+                     ON CONFLICT (doctor_id, day_of_week, start_time) DO NOTHING`,
+                    [doctorId, day, '09:00', '13:00', true]
                 );
-
-                // Add availability slots (Monday to Friday, 9 AM to 5 PM)
-                for (let day = 1; day <= 5; day++) {
-                    await pool.query(
-                        `INSERT INTO availability_slots (doctor_id, day_of_week, start_time, end_time, is_available)
-             VALUES ($1, $2, $3, $4, $5)
-             ON CONFLICT (doctor_id, day_of_week, start_time) DO NOTHING`,
-                        [doctorId, day, '09:00', '17:00', true]
-                    );
-                }
+                await pool.query(
+                    `INSERT INTO availability_slots (doctor_id, day_of_week, start_time, end_time, is_available)
+                     VALUES ($1, $2, $3, $4, $5)
+                     ON CONFLICT (doctor_id, day_of_week, start_time) DO NOTHING`,
+                    [doctorId, day, '14:00', '18:00', true]
+                );
             }
         }
 
-        console.log(`✅ ${doctors.length} doctors created with availability slots`);
+        console.log(`✅ ${doctors.length} doctors created/updated with availability slots`);
 
         // Create patients
         const patients = [
@@ -138,6 +183,7 @@ async function seed() {
                 city: 'Ranchi',
                 state: 'Jharkhand',
                 allergies: 'Penicillin',
+                chronicConditions: 'None',
             },
             {
                 email: 'sunita.devi@example.com',
@@ -151,41 +197,6 @@ async function seed() {
                 state: 'Bihar',
                 chronicConditions: 'Diabetes Type 2',
             },
-            {
-                email: 'vijay.singh@example.com',
-                firstName: 'Vijay',
-                lastName: 'Singh',
-                phone: '+91-9123456791',
-                dateOfBirth: '1978-12-10',
-                gender: 'Male',
-                bloodGroup: 'B+',
-                city: 'Lucknow',
-                state: 'Uttar Pradesh',
-            },
-            {
-                email: 'anita.sharma@example.com',
-                firstName: 'Anita',
-                lastName: 'Sharma',
-                phone: '+91-9123456792',
-                dateOfBirth: '1995-03-18',
-                gender: 'Female',
-                bloodGroup: 'AB+',
-                city: 'Jaipur',
-                state: 'Rajasthan',
-            },
-            {
-                email: 'mohan.lal@example.com',
-                firstName: 'Mohan',
-                lastName: 'Lal',
-                phone: '+91-9123456793',
-                dateOfBirth: '1982-07-25',
-                gender: 'Male',
-                bloodGroup: 'O-',
-                city: 'Bhopal',
-                state: 'Madhya Pradesh',
-                allergies: 'Sulfa drugs',
-                chronicConditions: 'Hypertension',
-            },
         ];
 
         const patientIds = [];
@@ -193,156 +204,72 @@ async function seed() {
             const password = await bcrypt.hash('patient123', 10);
             const userResult = await pool.query(
                 `INSERT INTO users (email, password_hash, role, first_name, last_name, phone, is_approved, is_active)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         ON CONFLICT (email) DO NOTHING
-         RETURNING id`,
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                 ON CONFLICT (email) DO UPDATE SET 
+                    first_name = EXCLUDED.first_name,
+                    last_name = EXCLUDED.last_name
+                 RETURNING id`,
                 [patient.email, password, 'patient', patient.firstName, patient.lastName, patient.phone, true, true]
             );
 
-            if (userResult.rows.length > 0) {
-                const patientId = userResult.rows[0].id;
-                patientIds.push(patientId);
+            const patientId = userResult.rows[0].id;
+            patientIds.push(patientId);
 
-                await pool.query(
-                    `INSERT INTO patient_profiles (user_id, date_of_birth, gender, blood_group, city, state, allergies, chronic_conditions)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-           ON CONFLICT (user_id) DO NOTHING`,
+            await pool.query(
+                `INSERT INTO patient_profiles (user_id, date_of_birth, gender, blood_group, city, state, allergies, chronic_conditions)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                 ON CONFLICT (user_id) DO UPDATE SET
+                    date_of_birth = EXCLUDED.date_of_birth,
+                    gender = EXCLUDED.gender,
+                    blood_group = EXCLUDED.blood_group,
+                    allergies = EXCLUDED.allergies,
+                    chronic_conditions = EXCLUDED.chronic_conditions`,
+                [
+                    patientId,
+                    patient.dateOfBirth,
+                    patient.gender,
+                    patient.bloodGroup,
+                    patient.city,
+                    patient.state,
+                    patient.allergies || null,
+                    patient.chronicConditions || null,
+                ]
+            );
+
+            // Add medical records for first patient
+            if (patient.email === 'ramesh.kumar@example.com' && doctorIds.length > 0) {
+                const mrResult = await pool.query(
+                    `INSERT INTO medical_records (patient_id, doctor_id, diagnosis, symptoms, notes, vital_signs)
+                     VALUES ($1, $2, $3, $4, $5, $6)
+                     RETURNING id`,
                     [
                         patientId,
-                        patient.dateOfBirth,
-                        patient.gender,
-                        patient.bloodGroup,
-                        patient.city,
-                        patient.state,
-                        patient.allergies || null,
-                        patient.chronicConditions || null,
+                        doctorIds[0],
+                        'Seasonal Flu',
+                        'Fever, Cough, Body ache',
+                        'Patient advised to take complete rest and stay hydrated.',
+                        JSON.stringify({ bp: '120/80', temp: '101 F', weight: '70kg' })
+                    ]
+                );
+
+                await pool.query(
+                    `INSERT INTO prescriptions (medical_record_id, patient_id, doctor_id, medications, instructions)
+                     VALUES ($1, $2, $3, $4, $5)`,
+                    [
+                        mrResult.rows[0].id,
+                        patientId,
+                        doctorIds[0],
+                        JSON.stringify([
+                            { name: 'Paracetamol', dosage: '500mg', frequency: 'Thrice a day', duration: '5 days' },
+                            { name: 'Cough Syrup', dosage: '10ml', frequency: 'Twice a day', duration: '5 days' }
+                        ]),
+                        'Avoid cold drinks and oily food.'
                     ]
                 );
             }
         }
 
-        console.log(`✅ ${patients.length} patients created`);
-
-        // Create sample appointments
-        if (doctorIds.length > 0 && patientIds.length > 0) {
-            const today = new Date();
-            const tomorrow = new Date(today);
-            tomorrow.setDate(tomorrow.getDate() + 1);
-            const nextWeek = new Date(today);
-            nextWeek.setDate(nextWeek.getDate() + 7);
-
-            const appointments = [
-                {
-                    patientId: patientIds[0],
-                    doctorId: doctorIds[0],
-                    date: tomorrow.toISOString().split('T')[0],
-                    startTime: '10:00',
-                    endTime: '10:30',
-                    symptoms: 'Chest pain and shortness of breath',
-                    status: 'scheduled',
-                },
-                {
-                    patientId: patientIds[1],
-                    doctorId: doctorIds[1],
-                    date: tomorrow.toISOString().split('T')[0],
-                    startTime: '14:00',
-                    endTime: '14:30',
-                    symptoms: 'Fever and body ache for 3 days',
-                    status: 'scheduled',
-                },
-                {
-                    patientId: patientIds[2],
-                    doctorId: doctorIds[2],
-                    date: nextWeek.toISOString().split('T')[0],
-                    startTime: '11:00',
-                    endTime: '11:30',
-                    symptoms: 'Child has persistent cough',
-                    status: 'scheduled',
-                },
-            ];
-
-            for (const appt of appointments) {
-                const channelName = `appointment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-                await pool.query(
-                    `INSERT INTO appointments (patient_id, doctor_id, appointment_date, start_time, end_time, symptoms, status, video_channel_name)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-                    [appt.patientId, appt.doctorId, appt.date, appt.startTime, appt.endTime, appt.symptoms, appt.status, channelName]
-                );
-            }
-
-            console.log(`✅ ${appointments.length} sample appointments created`);
-        }
-
-        // Create health articles
-        const articles = [
-            {
-                title: 'Understanding Diabetes: Prevention and Management',
-                content: `Diabetes is a chronic condition that affects how your body processes blood sugar. Here are key points for prevention and management:
-
-1. **Healthy Diet**: Focus on whole grains, fruits, vegetables, and lean proteins
-2. **Regular Exercise**: Aim for at least 30 minutes of moderate activity daily
-3. **Weight Management**: Maintain a healthy weight to reduce risk
-4. **Regular Monitoring**: Check blood sugar levels as recommended
-5. **Medication Compliance**: Take prescribed medications on time
-
-Early detection and proper management can help prevent complications.`,
-                category: 'Chronic Diseases',
-                isPublished: true,
-            },
-            {
-                title: 'Heart Health: Tips for a Healthy Heart',
-                content: `Your heart is your body's engine. Keep it healthy with these tips:
-
-1. **Eat Heart-Healthy Foods**: Include omega-3 fatty acids, reduce saturated fats
-2. **Stay Active**: Regular cardiovascular exercise strengthens your heart
-3. **Manage Stress**: Practice relaxation techniques like meditation
-4. **Quit Smoking**: Smoking is a major risk factor for heart disease
-5. **Control Blood Pressure**: Monitor and manage hypertension
-6. **Limit Alcohol**: Moderate consumption only
-
-Regular check-ups can help detect issues early.`,
-                category: 'Heart Health',
-                isPublished: true,
-            },
-            {
-                title: 'Common Cold vs Flu: Know the Difference',
-                content: `While both are respiratory illnesses, they differ in severity:
-
-**Common Cold:**
-- Gradual onset
-- Mild symptoms
-- Runny nose, sore throat
-- Rarely causes complications
-
-**Flu:**
-- Sudden onset
-- Severe symptoms
-- High fever, body aches
-- Can lead to serious complications
-
-**When to See a Doctor:**
-- High fever lasting more than 3 days
-- Difficulty breathing
-- Chest pain
-- Severe weakness
-
-Stay hydrated and get plenty of rest for both conditions.`,
-                category: 'General Health',
-                isPublished: true,
-            },
-        ];
-
-        if (adminResult.rows.length > 0) {
-            for (const article of articles) {
-                await pool.query(
-                    `INSERT INTO health_articles (title, content, category, author_id, is_published)
-           VALUES ($1, $2, $3, $4, $5)`,
-                    [article.title, article.content, article.category, adminResult.rows[0].id, article.isPublished]
-                );
-            }
-
-            console.log(`✅ ${articles.length} health articles created`);
-        }
+        console.log(`✅ ${patients.length} patients created/updated with medical history`);
 
         console.log(`
 ╔═══════════════════════════════════════════════════════════╗

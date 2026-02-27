@@ -1,0 +1,41 @@
+{
+  "user": {
+    "id": "e0deae2c-8452-4a7f-8bd8-a1cf48751a82",
+    "email": "ramesh.kumar@example.com",
+    "role": "patient"
+  },
+  "appointments": [
+    {
+      "id": "98a7328f-129e-4fb4-b4e9-3601e02caf94",
+      "patient_id": "e0deae2c-8452-4a7f-8bd8-a1cf48751a82",
+      "doctor_id": "692c4ed1-09f6-4ad9-aac7-a2f29cca808f",
+      "appointment_date": "2026-02-18T18:30:00.000Z",
+      "start_time": "00:01:00",
+      "end_time": "07:49:00",
+      "status": "missed",
+      "symptoms": null,
+      "cancellation_reason": null,
+      "video_channel_name": null,
+      "created_at": "2026-02-19T02:49:09.411Z",
+      "updated_at": "2026-02-19T02:49:09.976Z",
+      "doctor_attended": false,
+      "patient_attended": false
+    },
+    {
+      "id": "97dbf9eb-2b18-437b-badb-f2eb75852afc",
+      "patient_id": "e0deae2c-8452-4a7f-8bd8-a1cf48751a82",
+      "doctor_id": "692c4ed1-09f6-4ad9-aac7-a2f29cca808f",
+      "appointment_date": "2026-02-18T18:30:00.000Z",
+      "start_time": "09:00:00",
+      "end_time": "09:30:00",
+      "status": "completed",
+      "symptoms": "",
+      "cancellation_reason": null,
+      "video_channel_name": "appointment_1771468614804_e0deae2c-8452-4a7f-8bd8-a1cf48751a82",
+      "created_at": "2026-02-19T02:36:54.806Z",
+      "updated_at": "2026-02-19T03:22:34.527Z",
+      "doctor_attended": false,
+      "patient_attended": false
+    }
+  ]
+}

@@ -93,7 +93,13 @@ export default function VideoCall({ appointmentId, onCallEnd }: VideoCallProps) 
 
         } catch (err: any) {
             console.error('Error initializing call:', err);
-            setError(err.message || 'Failed to join call');
+            if (err.code === 'PERMISSION_DENIED') {
+                setError('Media access denied. Please allow camera and microphone access in your browser settings.');
+            } else if (err.code === 'NOT_READABLE') {
+                setError('Camera or microphone is already in use by another application.');
+            } else {
+                setError(err.message || 'Failed to join call. Please check your connection and try again.');
+            }
         }
     };
 

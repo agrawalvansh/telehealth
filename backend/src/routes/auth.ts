@@ -105,6 +105,14 @@ router.post(
                 signOptions
             );
 
+            // Set cookie
+            res.cookie('token', token, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'lax',
+                maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+            });
+
             res.status(201).json({
                 message: role === 'doctor'
                     ? 'Doctor account created. Awaiting admin approval.'
@@ -203,6 +211,14 @@ router.post(
                 signOptions
             );
 
+            // Set cookie
+            res.cookie('token', token, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'lax',
+                maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+            });
+
             res.json({
                 message: 'Login successful',
                 token,
@@ -236,7 +252,11 @@ router.post(
  */
 router.get('/me', async (req: Request, res: Response) => {
     const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
+    let token = authHeader && authHeader.split(' ')[1];
+
+    if (!token && req.cookies) {
+        token = req.cookies.token;
+    }
 
     if (!token) {
         return res.status(401).json({ error: 'Access token required' });
@@ -273,6 +293,18 @@ router.get('/me', async (req: Request, res: Response) => {
     } catch (error) {
         res.status(403).json({ error: 'Invalid token' });
     }
+});
+
+/**
+ * @swagger
+ * /api/auth/logout:
+ *   post:
+ *     summary: Logout user
+ *     tags: [Auth]
+ */
+router.post('/logout', (req: Request, res: Response) => {
+    res.clearCookie('token');
+    res.json({ message: 'Logout successful' });
 });
 
 export default router;

@@ -9,7 +9,7 @@ import Link from 'next/link';
 
 export default function DoctorProfilePage() {
     const router = useRouter();
-    const { user, isAuthenticated, updateUser } = useAuthStore();
+    const { user, isAuthenticated, isHydrated, updateUser } = useAuthStore();
     const [formData, setFormData] = useState({
         firstName: '',
         lastName: '',
@@ -29,12 +29,14 @@ export default function DoctorProfilePage() {
     const [success, setSuccess] = useState(false);
 
     useEffect(() => {
+        if (!isHydrated) return;
+
         if (!isAuthenticated || user?.role !== 'doctor') {
             router.push('/auth/login');
             return;
         }
         fetchProfile();
-    }, [isAuthenticated, user]);
+    }, [isHydrated, isAuthenticated, user]);
 
     const fetchProfile = async () => {
         try {

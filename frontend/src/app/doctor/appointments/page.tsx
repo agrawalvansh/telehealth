@@ -7,10 +7,21 @@ import { doctorAPI, appointmentAPI } from '@/lib/api';
 import { FaCalendarAlt, FaVideo, FaFileMedical } from 'react-icons/fa';
 import Link from 'next/link';
 import VideoCall from '@/components/VideoCall';
+import { initSocket, disconnectSocket } from '@/lib/socket';
+
+const canJoinCall = (appointment: any) => {
+    if (appointment.status !== 'scheduled' && appointment.status !== 'in_progress') return false;
+    const apptDateStr = new Date(appointment.appointment_date).toISOString().split('T')[0];
+    const appointmentDateTime = new Date(`${apptDateStr}T${appointment.start_time}`);
+    const now = new Date();
+    const timeDiff = now.getTime() - appointmentDateTime.getTime();
+    const minutesDiff = timeDiff / (1000 * 60);
+    return minutesDiff >= -15;
+};
 
 export default function DoctorAppointmentsPage() {
     const router = useRouter();
-    const { user, isAuthenticated } = useAuthStore();
+    const { user, isAuthenticated, isHydrated } = useAuthStore();
     const [appointments, setAppointments] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [activeCall, setActiveCall] = useState<string | null>(null);
@@ -25,11 +36,35 @@ export default function DoctorAppointmentsPage() {
     });
 
     useEffect(() => {
+        if (!isHydrated) return;
+
         if (!isAuthenticated || user?.role !== 'doctor') {
             router.push('/auth/login');
             return;
         }
         fetchAppointments();
+
+        // Socket integration
+        const socket = initSocket(user.id);
+
+        socket.on('appointment_created', (newAppt) => {
+            setAppointments(prev => {
+                if (prev.find(a => a.id === newAppt.id)) return prev;
+                return [newAppt, ...prev];
+            });
+        });
+
+        socket.on('appointment_updated', (updatedAppt) => {
+            setAppointments(prev => prev.map(a => a.id === updatedAppt.id ? updatedAppt : a));
+        });
+
+        socket.on('appointment_deleted', ({ id }) => {
+            setAppointments(prev => prev.filter(a => a.id !== id));
+        });
+
+        return () => {
+            // disconnectSocket();
+        };
     }, [isAuthenticated, user]);
 
     const fetchAppointments = async () => {
@@ -82,22 +117,13 @@ export default function DoctorAppointmentsPage() {
         );
     }
 
-    const todayAppointments = appointments.filter((a) => {
-        const today = new Date();
-        const appointmentDate = new Date(a.appointment_date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-        // Show appointments from past 24 hours and future appointments with scheduled status
-        const hoursDiff = (today.getTime() - appointmentDate.getTime()) / (1000 * 60 * 60);
-        return hoursDiff <= 24 && hoursDiff >= -24 && a.status === 'scheduled';
-    });
-
-    const upcomingAppointments = appointments.filter((a) => {
-        const today = new Date();
-        const appointmentDate = new Date(a.appointment_date);
-        const daysDiff = (appointmentDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24);
-
-        return daysDiff > 1 && a.status === 'scheduled';
-    });
+    const upcomingAppointments = appointments.filter((a) => a.status === 'scheduled');
+    const completedAppointments = appointments.filter((a) => a.status === 'completed');
+    const missedAppointments = appointments.filter((a) => a.status === 'missed');
+    const cancelledAppointments = appointments.filter((a) => a.status === 'cancelled');
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50">
@@ -113,21 +139,25 @@ export default function DoctorAppointmentsPage() {
             </header>
 
             <div className="container mx-auto px-6 py-8">
-                {/* Today's Appointments */}
-                <div className="mb-8">
-                    <h2 className="text-2xl font-bold mb-4">Today's Appointments</h2>
-                    {todayAppointments.length === 0 ? (
-                        <div className="card text-center py-8">
-                            <p className="text-gray-500">No appointments today</p>
+                {/* Upcoming Appointments */}
+                <div className="mb-12">
+                    <h2 className="text-2xl font-bold mb-6 flex items-center">
+                        <span className="w-2 h-8 bg-blue-500 rounded-full mr-3"></span>
+                        Upcoming Schedule
+                    </h2>
+                    {upcomingAppointments.length === 0 ? (
+                        <div className="card text-center py-12 bg-gray-50/50">
+                            <FaCalendarAlt className="text-6xl text-gray-300 mx-auto mb-4" />
+                            <p className="text-gray-500">No upcoming appointments scheduled</p>
                         </div>
                     ) : (
                         <div className="space-y-4">
-                            {todayAppointments.map((appointment) => (
+                            {upcomingAppointments.map((appointment) => (
                                 <AppointmentCard
                                     key={appointment.id}
                                     appointment={appointment}
                                     onJoinCall={setActiveCall}
-                                    onAddRecord={(appt) => {
+                                    onAddRecord={(appt: any) => {
                                         setSelectedAppointment(appt);
                                         setShowMedicalRecordForm(true);
                                     }}
@@ -137,26 +167,86 @@ export default function DoctorAppointmentsPage() {
                     )}
                 </div>
 
-                {/* Upcoming Appointments */}
-                <div>
-                    <h2 className="text-2xl font-bold mb-4">Upcoming Appointments</h2>
-                    {upcomingAppointments.length === 0 ? (
-                        <div className="card text-center py-8">
-                            <p className="text-gray-500">No upcoming appointments</p>
+                <div className="grid md:grid-cols-1 gap-12">
+                    {/* Completed Appointments */}
+                    {completedAppointments.length > 0 && (
+                        <div>
+                            <h2 className="text-2xl font-bold mb-6 flex items-center">
+                                <span className="w-2 h-8 bg-green-500 rounded-full mr-3"></span>
+                                Recently Completed
+                            </h2>
+                            <div className="space-y-4">
+                                {completedAppointments.map((appointment) => (
+                                    <div key={appointment.id} className="card border-l-4 border-green-500 opacity-90">
+                                        <div className="flex items-start justify-between">
+                                            <div className="flex-1">
+                                                <h3 className="text-lg font-semibold">
+                                                    {appointment.patient_first_name} {appointment.patient_last_name}
+                                                </h3>
+                                                <p className="text-sm text-gray-600">
+                                                    {new Date(appointment.appointment_date).toLocaleDateString()} at {appointment.start_time}
+                                                </p>
+                                            </div>
+                                            <span className="badge badge-success">Completed</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
-                    ) : (
-                        <div className="space-y-4">
-                            {upcomingAppointments.map((appointment) => (
-                                <AppointmentCard
-                                    key={appointment.id}
-                                    appointment={appointment}
-                                    onJoinCall={setActiveCall}
-                                    onAddRecord={(appt) => {
-                                        setSelectedAppointment(appt);
-                                        setShowMedicalRecordForm(true);
-                                    }}
-                                />
-                            ))}
+                    )}
+
+                    {/* Missed Appointments */}
+                    {missedAppointments.length > 0 && (
+                        <div>
+                            <h2 className="text-2xl font-bold mb-6 flex items-center text-orange-600">
+                                <span className="w-2 h-8 bg-orange-500 rounded-full mr-3"></span>
+                                Missed Appointments
+                            </h2>
+                            <div className="space-y-4">
+                                {missedAppointments.map((appointment) => (
+                                    <div key={appointment.id} className="card border-l-4 border-orange-500 bg-orange-50/30">
+                                        <div className="flex items-start justify-between">
+                                            <div className="flex-1">
+                                                <h3 className="text-lg font-semibold">
+                                                    {appointment.patient_first_name} {appointment.patient_last_name}
+                                                </h3>
+                                                <p className="text-sm text-gray-600">
+                                                    {new Date(appointment.appointment_date).toLocaleDateString()} at {appointment.start_time}
+                                                </p>
+                                                <p className="text-xs text-orange-600 mt-2 italic">Marked as missed due to no-show</p>
+                                            </div>
+                                            <span className="badge bg-orange-100 text-orange-700 border-orange-200">Missed</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Cancelled Appointments */}
+                    {cancelledAppointments.length > 0 && (
+                        <div>
+                            <h2 className="text-2xl font-bold mb-6 flex items-center text-gray-600">
+                                <span className="w-2 h-8 bg-gray-400 rounded-full mr-3"></span>
+                                Cancelled
+                            </h2>
+                            <div className="space-y-4">
+                                {cancelledAppointments.map((appointment) => (
+                                    <div key={appointment.id} className="card border-l-4 border-gray-400 bg-gray-50 opacity-75">
+                                        <div className="flex items-start justify-between">
+                                            <div className="flex-1">
+                                                <h3 className="text-lg font-semibold">
+                                                    {appointment.patient_first_name} {appointment.patient_last_name}
+                                                </h3>
+                                                <p className="text-sm text-gray-600">
+                                                    {new Date(appointment.appointment_date).toLocaleDateString()} at {appointment.start_time}
+                                                </p>
+                                            </div>
+                                            <span className="badge badge-danger">Cancelled</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     )}
                 </div>
@@ -307,10 +397,16 @@ function AppointmentCard({ appointment, onJoinCall, onAddRecord }: any) {
 
                 <div className="flex flex-col space-y-2">
                     <span className="badge badge-info">{appointment.status}</span>
-                    <button onClick={() => onJoinCall(appointment.id)} className="btn btn-primary btn-sm flex items-center space-x-2">
-                        <FaVideo />
-                        <span>Join Call</span>
-                    </button>
+                    {canJoinCall(appointment) ? (
+                        <button onClick={() => onJoinCall(appointment.id)} className="btn btn-primary btn-sm flex items-center space-x-2">
+                            <FaVideo />
+                            <span>Join Call</span>
+                        </button>
+                    ) : (
+                        <button disabled className="btn btn-outline btn-sm opacity-50 cursor-not-allowed">
+                            Call Not Available
+                        </button>
+                    )}
                     <button onClick={() => onAddRecord(appointment)} className="btn btn-secondary btn-sm flex items-center space-x-2">
                         <FaFileMedical />
                         <span>Add Record</span>

@@ -33,6 +33,7 @@ router.post(
         const { doctorId, appointmentDate, startTime, endTime, symptoms } = req.body;
 
         try {
+            console.log(`[Lifecycle] Booking attempt: Doctor ${doctorId}, Patient ${req.user!.id}, Date ${appointmentDate}, Start ${startTime}`);
             // Check if slot is already booked
             const existingAppointment = await pool.query(
                 `SELECT id FROM appointments
@@ -42,7 +43,16 @@ router.post(
             );
 
             if (existingAppointment.rows.length > 0) {
+                console.log(`[Lifecycle] Booking failed: Slot conflict for Doctor ${doctorId}`);
                 return res.status(400).json({ error: 'This slot is already booked' });
+            }
+
+            // Check if appointment is in the past
+            const now = new Date();
+            const appointmentDateTime = new Date(`${appointmentDate}T${startTime}`);
+            if (appointmentDateTime < now) {
+                console.log(`[Lifecycle] Booking failed: Past date ${appointmentDateTime}`);
+                return res.status(400).json({ error: 'Cannot book appointments in the past' });
             }
 
             // Check if doctor has availability for this day/time
@@ -56,6 +66,7 @@ router.post(
             );
 
             if (availability.rows.length === 0) {
+                console.log(`[Lifecycle] Booking failed: Doctor ${doctorId} not available at ${startTime}`);
                 return res.status(400).json({
                     error: 'Doctor is not available at this time'
                 });
@@ -72,9 +83,33 @@ router.post(
                 [req.user!.id, doctorId, appointmentDate, startTime, endTime, symptoms, videoChannelName]
             );
 
+            const appointment = result.rows[0];
+            console.log(`[Lifecycle] Appointment created: ID ${appointment.id}, Status ${appointment.status}, Date ${appointment.appointment_date}, Start ${appointment.start_time}, Patient ${appointment.patient_id}`);
+
+            // Fetch enriched appointment data for socket emission
+            const enrichedResult = await pool.query(
+                `SELECT a.*,
+                  p.first_name as patient_first_name, p.last_name as patient_last_name,
+                  d.first_name as doctor_first_name, d.last_name as doctor_last_name,
+                  dp.specialization
+           FROM appointments a
+           JOIN users p ON a.patient_id = p.id
+           JOIN users d ON a.doctor_id = d.id
+           JOIN doctor_profiles dp ON d.id = dp.user_id
+           WHERE a.id = $1`,
+                [appointment.id]
+            );
+            const enrichedAppointment = enrichedResult.rows[0];
+
+            // Emit socket events for real-time update
+            const { emitEvent } = require('../config/socket');
+            emitEvent(`user_${appointment.patient_id}`, 'appointment_created', enrichedAppointment);
+            emitEvent(`user_${appointment.doctor_id}`, 'appointment_created', enrichedAppointment);
+            emitEvent('doctors', 'AVAILABILITY_UPDATE', { doctorId, appointmentDate });
+
             res.status(201).json({
                 message: 'Appointment booked successfully',
-                appointment: result.rows[0],
+                appointment,
             });
         } catch (error: any) {
             console.error('Error booking appointment:', error);
@@ -127,37 +162,75 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
  * @swagger
  * /api/appointments/{id}/status:
  *   patch:
- *     summary: Update appointment status
+ *     summary: Update appointment status (Attendance)
  *     tags: [Appointments]
  *     security:
  *       - bearerAuth: []
  */
 router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
-    const { status } = req.body;
+    const { attended } = req.body;
+    const role = req.user!.role;
 
-    if (!['scheduled', 'in_progress', 'completed', 'cancelled'].includes(status)) {
-        return res.status(400).json({ error: 'Invalid status' });
+    if (attended === undefined) {
+        return res.status(400).json({ error: 'Attended status is required' });
     }
 
     try {
-        const result = await pool.query(
-            `UPDATE appointments
-       SET status = $1
-       WHERE id = $2 AND (patient_id = $3 OR doctor_id = $3)
-       RETURNING *`,
-            [status, req.params.id, req.user!.id]
-        );
+        console.log(`[Lifecycle] Attendance update: ID ${req.params.id}, Role ${role}, Attended ${attended}`);
+        let updateQuery = '';
+        if (role === 'doctor') {
+            updateQuery = 'UPDATE appointments SET doctor_attended = $1 WHERE id = $2 AND doctor_id = $3 RETURNING *';
+        } else if (role === 'patient') {
+            updateQuery = 'UPDATE appointments SET patient_attended = $1 WHERE id = $2 AND patient_id = $3 RETURNING *';
+        } else {
+            return res.status(403).json({ error: 'Invalid role' });
+        }
+
+        const result = await pool.query(updateQuery, [attended, req.params.id, req.user!.id]);
 
         if (result.rows.length === 0) {
+            console.log(`[Lifecycle] Attendance update failed: ID ${req.params.id} not found/accessible`);
             return res.status(404).json({ error: 'Appointment not found' });
         }
 
+        const appointment = result.rows[0];
+
+        // Check for mutual attendance
+        if (appointment.doctor_attended && appointment.patient_attended) {
+            console.log(`[Lifecycle] Mutual attendance achieved for ID ${appointment.id}. Marking as 'completed'.`);
+            await pool.query(
+                "UPDATE appointments SET status = 'completed' WHERE id = $1",
+                [appointment.id]
+            );
+            appointment.status = 'completed';
+        }
+
         res.json({
-            message: 'Appointment status updated',
-            appointment: result.rows[0],
+            message: 'Attendance updated successfully',
+            appointment,
         });
+
+        // Fetch enriched appointment data
+        const enrichedResult = await pool.query(
+            `SELECT a.*,
+              p.first_name as patient_first_name, p.last_name as patient_last_name,
+              d.first_name as doctor_first_name, d.last_name as doctor_last_name,
+              dp.specialization
+       FROM appointments a
+       JOIN users p ON a.patient_id = p.id
+       JOIN users d ON a.doctor_id = d.id
+       JOIN doctor_profiles dp ON d.id = dp.user_id
+       WHERE a.id = $1`,
+            [appointment.id]
+        );
+        const enrichedAppointment = enrichedResult.rows[0];
+
+        // Emit socket events
+        const { emitEvent } = require('../config/socket');
+        emitEvent(`user_${appointment.patient_id}`, 'appointment_updated', enrichedAppointment);
+        emitEvent(`user_${appointment.doctor_id}`, 'appointment_updated', enrichedAppointment);
     } catch (error) {
-        console.error('Error updating appointment status:', error);
+        console.error('Error updating appointment attendance:', error);
         res.status(500).json({ error: 'Server error' });
     }
 });
@@ -175,6 +248,7 @@ router.post('/:id/cancel', async (req: AuthRequest, res: Response) => {
     const { reason } = req.body;
 
     try {
+        console.log(`[Lifecycle] Cancellation attempt: ID ${req.params.id}, Reason: ${reason}`);
         const result = await pool.query(
             `UPDATE appointments
        SET status = 'cancelled', cancellation_reason = $1
@@ -185,14 +259,38 @@ router.post('/:id/cancel', async (req: AuthRequest, res: Response) => {
         );
 
         if (result.rows.length === 0) {
+            console.log(`[Lifecycle] Cancellation failed: ID ${req.params.id} not found or not schedulable`);
             return res.status(404).json({
                 error: 'Appointment not found or cannot be cancelled'
             });
         }
 
+        const appointment = result.rows[0];
+        console.log(`[Lifecycle] Appointment cancelled: ID ${appointment.id}`);
+
+        // Fetch enriched appointment data
+        const enrichedResult = await pool.query(
+            `SELECT a.*,
+              p.first_name as patient_first_name, p.last_name as patient_last_name,
+              d.first_name as doctor_first_name, d.last_name as doctor_last_name,
+              dp.specialization
+       FROM appointments a
+       JOIN users p ON a.patient_id = p.id
+       JOIN users d ON a.doctor_id = d.id
+       JOIN doctor_profiles dp ON d.id = dp.user_id
+       WHERE a.id = $1`,
+            [appointment.id]
+        );
+        const enrichedAppointment = enrichedResult.rows[0];
+
+        // Emit socket events
+        const { emitEvent } = require('../config/socket');
+        emitEvent(`user_${appointment.patient_id}`, 'appointment_updated', enrichedAppointment);
+        emitEvent(`user_${appointment.doctor_id}`, 'appointment_updated', enrichedAppointment);
+
         res.json({
             message: 'Appointment cancelled successfully',
-            appointment: result.rows[0],
+            appointment: enrichedAppointment,
         });
     } catch (error) {
         console.error('Error cancelling appointment:', error);
@@ -213,6 +311,7 @@ router.post('/:id/reschedule', async (req: AuthRequest, res: Response) => {
     const { appointmentDate, startTime, endTime } = req.body;
 
     try {
+        console.log(`[Lifecycle] Reschedule attempt: ID ${req.params.id}, New Date ${appointmentDate}, New Start ${startTime}`);
         // Get current appointment
         const current = await pool.query(
             'SELECT * FROM appointments WHERE id = $1 AND patient_id = $2',
@@ -220,6 +319,7 @@ router.post('/:id/reschedule', async (req: AuthRequest, res: Response) => {
         );
 
         if (current.rows.length === 0) {
+            console.log(`[Lifecycle] Reschedule failed: ID ${req.params.id} not found for patient`);
             return res.status(404).json({ error: 'Appointment not found' });
         }
 
@@ -234,21 +334,45 @@ router.post('/:id/reschedule', async (req: AuthRequest, res: Response) => {
         );
 
         if (conflict.rows.length > 0) {
+            console.log(`[Lifecycle] Reschedule failed: Slot conflict for Doctor ${appointment.doctor_id}`);
             return res.status(400).json({ error: 'New slot is already booked' });
         }
 
         // Update appointment
         const result = await pool.query(
             `UPDATE appointments
-       SET appointment_date = $1, start_time = $2, end_time = $3
+       SET appointment_date = $1, start_time = $2, end_time = $3, updated_at = CURRENT_TIMESTAMP
        WHERE id = $4
        RETURNING *`,
             [appointmentDate, startTime, endTime, req.params.id]
         );
 
+        const updatedAppt = result.rows[0];
+        console.log(`[Lifecycle] Appointment rescheduled: ID ${updatedAppt.id}`);
+
+        // Fetch enriched appointment data
+        const enrichedResult = await pool.query(
+            `SELECT a.*,
+              p.first_name as patient_first_name, p.last_name as patient_last_name,
+              d.first_name as doctor_first_name, d.last_name as doctor_last_name,
+              dp.specialization
+       FROM appointments a
+       JOIN users p ON a.patient_id = p.id
+       JOIN users d ON a.doctor_id = d.id
+       JOIN doctor_profiles dp ON d.id = dp.user_id
+       WHERE a.id = $1`,
+            [updatedAppt.id]
+        );
+        const enrichedAppointment = enrichedResult.rows[0];
+
+        // Emit socket events
+        const { emitEvent } = require('../config/socket');
+        emitEvent(`user_${updatedAppt.patient_id}`, 'appointment_updated', enrichedAppointment);
+        emitEvent(`user_${updatedAppt.doctor_id}`, 'appointment_updated', enrichedAppointment);
+
         res.json({
             message: 'Appointment rescheduled successfully',
-            appointment: result.rows[0],
+            appointment: enrichedAppointment,
         });
     } catch (error) {
         console.error('Error rescheduling appointment:', error);
@@ -311,9 +435,10 @@ router.post('/:id/medical-record', async (req: AuthRequest, res: Response) => {
             );
         }
 
-        // Update appointment status to completed
+        // Update appointment status to completed (if medical record is added, it's effectively completed)
+        console.log(`[Lifecycle] Adding medical record for ID ${req.params.id}. Marking as 'completed' and achieving auto-attendance.`);
         await pool.query(
-            'UPDATE appointments SET status = $1 WHERE id = $2',
+            "UPDATE appointments SET status = $1, doctor_attended = true, patient_attended = true, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
             ['completed', req.params.id]
         );
 

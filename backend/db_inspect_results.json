@@ -1,0 +1,37 @@
+{
+  "recent_appointments": [
+    {
+      "id": "8e86f614-f7e3-496d-94d7-5c1e8c526920",
+      "status": "scheduled",
+      "appointment_date": "2026-02-18T18:30:00.000Z",
+      "start_time": "18:30:00",
+      "end_time": "19:00:00",
+      "created_at": "2026-02-19T12:43:53.628Z",
+      "updated_at": "2026-02-19T12:43:53.628Z"
+    },
+    {
+      "id": "98a7328f-129e-4fb4-b4e9-3601e02caf94",
+      "status": "missed",
+      "appointment_date": "2026-02-18T18:30:00.000Z",
+      "start_time": "00:01:00",
+      "end_time": "07:49:00",
+      "created_at": "2026-02-19T02:49:09.411Z",
+      "updated_at": "2026-02-19T02:49:09.976Z"
+    },
+    {
+      "id": "97dbf9eb-2b18-437b-badb-f2eb75852afc",
+      "status": "completed",
+      "appointment_date": "2026-02-18T18:30:00.000Z",
+      "start_time": "09:00:00",
+      "end_time": "09:30:00",
+      "created_at": "2026-02-19T02:36:54.806Z",
+      "updated_at": "2026-02-19T03:22:34.527Z"
+    }
+  ],
+  "database_time": [
+    {
+      "db_now": "2026-02-19T12:51:32.323Z",
+      "db_ct": "2026-02-19T12:51:32.323Z"
+    }
+  ]
+}

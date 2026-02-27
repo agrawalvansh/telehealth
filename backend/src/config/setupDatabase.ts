@@ -11,12 +11,29 @@ async function setupDatabase() {
             'utf-8'
         );
 
-        await pool.query(schemaSQL);
+        // Split by semicolon, but handle the trigger/function blocks that use $$
+        const queries = schemaSQL.split(/;(?=(?:[^$]*\$\$[^$]*\$\$)*[^$]*$)/).filter(q => q.trim().length > 0);
 
-        console.log('✅ Database schema created successfully!');
+        console.log(`📝 Found ${queries.length} potential queries.`);
+
+        for (let i = 0; i < queries.length; i++) {
+            const query = queries[i].trim();
+            if (!query) continue;
+
+            try {
+                await pool.query(query);
+            } catch (err: any) {
+                console.error(`❌ Error in query ${i + 1}:`);
+                console.error('SQL:', query.substring(0, 100) + '...');
+                console.error('Error:', err.message);
+                // Continue to see other errors unless they are critical
+            }
+        }
+
+        console.log('✅ Database schema processing complete!');
         process.exit(0);
     } catch (error) {
-        console.error('❌ Error setting up database:', error);
+        console.error('❌ Fatal error:', error);
         process.exit(1);
     }
 }

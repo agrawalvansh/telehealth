@@ -125,6 +125,7 @@ router.put('/profile', async (req: AuthRequest, res: Response) => {
  */
 router.get('/appointments', async (req: AuthRequest, res: Response) => {
     try {
+        console.log(`[Lifecycle] Fetching appointments for Patient ${req.user!.id} at ${new Date().toISOString()}`);
         const result = await pool.query(
             `SELECT a.*, 
               d.first_name as doctor_first_name,
@@ -133,7 +134,7 @@ router.get('/appointments', async (req: AuthRequest, res: Response) => {
               dp.hospital_name
        FROM appointments a
        JOIN users d ON a.doctor_id = d.id
-       JOIN doctor_profiles dp ON d.id = dp.user_id
+       LEFT JOIN doctor_profiles dp ON d.id = dp.user_id
        WHERE a.patient_id = $1
        ORDER BY a.appointment_date DESC, a.start_time DESC`,
             [req.user!.id]

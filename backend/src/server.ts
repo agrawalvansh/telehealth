@@ -1,7 +1,11 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import cookieParser from 'cookie-parser';
+import { createServer } from 'http';
 import { setupSwagger } from './swagger';
+import { initSocket } from './config/socket';
+import { startCleanupTask } from './scripts/cleanup';
 
 // Import routes
 import authRoutes from './routes/auth';
@@ -17,32 +21,19 @@ import searchRoutes from './routes/search';
 dotenv.config();
 
 const app = express();
+const httpServer = createServer(app);
+const io = initSocket(httpServer);
 const PORT = process.env.PORT || 5000;
 
 // Middleware
 app.use(cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-    credentials: true,
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  credentials: true,
 }));
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
-// Request logging middleware
-app.use((req, res, next) => {
-    console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
-    next();
-});
-
-// Health check endpoint
-app.get('/health', (req, res) => {
-    res.json({
-        status: 'ok',
-        message: 'Telehealth API is running',
-        timestamp: new Date().toISOString(),
-    });
-});
-
-// API Routes
+// Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/patients', patientRoutes);
 app.use('/api/doctors', doctorRoutes);
@@ -52,25 +43,12 @@ app.use('/api/video', videoRoutes);
 app.use('/api/health-articles', healthArticlesRoutes);
 app.use('/api/search', searchRoutes);
 
-// Setup Swagger documentation
+// Swagger Documentation
 setupSwagger(app);
 
-// 404 handler
-app.use((req, res) => {
-    res.status(404).json({ error: 'Route not found' });
-});
-
-// Global error handler
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-    console.error('Error:', err);
-    res.status(err.status || 500).json({
-        error: err.message || 'Internal server error',
-    });
-});
-
 // Start server
-app.listen(PORT, () => {
-    console.log(`
+httpServer.listen(PORT, () => {
+  console.log(`
 ╔═══════════════════════════════════════════════════════════╗
 ║                                                           ║
 ║   🏥  Telehealth System API Server                       ║
@@ -81,6 +59,9 @@ app.listen(PORT, () => {
 ║                                                           ║
 ╚═══════════════════════════════════════════════════════════╝
   `);
+
+  // Start background tasks
+  startCleanupTask();
 });
 
 export default app;

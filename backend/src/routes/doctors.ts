@@ -111,6 +111,33 @@ router.get('/:id/availability', async (req, res: Response) => {
     }
 });
 
+/**
+ * @swagger
+ * /api/doctors/{id}/busy-slots:
+ *   get:
+ *     summary: Get doctor's booked slots for a specific date
+ *     tags: [Doctors]
+ */
+router.get('/:id/busy-slots', async (req, res: Response) => {
+    const { date } = req.query;
+    if (!date) {
+        return res.status(400).json({ error: 'Date is required' });
+    }
+
+    try {
+        const result = await pool.query(
+            `SELECT start_time, end_time FROM appointments
+       WHERE doctor_id = $1 AND appointment_date = $2 AND status != 'cancelled'`,
+            [req.params.id, date]
+        );
+
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Error fetching busy slots:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
 // Protected routes - require doctor authentication
 router.use(authenticateToken);
 router.use(authorizeRoles('doctor'));
@@ -138,11 +165,15 @@ router.get('/me/profile', async (req: AuthRequest, res: Response) => {
             [req.user!.id]
         );
 
-        if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'Profile not found' });
-        }
+        const todayConsultations = await pool.query(
+            "SELECT COUNT(*) FROM appointments WHERE doctor_id = $1 AND status = 'completed' AND appointment_date = CURRENT_DATE",
+            [req.user!.id]
+        );
 
-        res.json(result.rows[0]);
+        const profile = result.rows[0];
+        profile.today_consultations = parseInt(todayConsultations.rows[0].count);
+
+        res.json(profile);
     } catch (error) {
         console.error('Error fetching doctor profile:', error);
         res.status(500).json({ error: 'Server error' });
@@ -211,6 +242,11 @@ router.put('/me/profile', async (req: AuthRequest, res: Response) => {
                 req.user!.id,
             ]
         );
+
+        // Emit socket events
+        const { emitEvent } = require('../config/socket');
+        emitEvent(`user_${req.user!.id}`, 'DOCTOR_UPDATED', { doctorId: req.user!.id });
+        emitEvent('doctors_list', 'DOCTOR_UPDATED', { doctorId: req.user!.id });
 
         res.json({ message: 'Profile updated successfully' });
     } catch (error) {
@@ -296,7 +332,14 @@ router.post('/me/availability', async (req: AuthRequest, res: Response) => {
             [req.user!.id, dayOfWeek, startTime, endTime]
         );
 
-        res.status(201).json(result.rows[0]);
+        const slot = result.rows[0];
+
+        // Emit socket events
+        const { emitEvent } = require('../config/socket');
+        emitEvent(`user_${req.user!.id}`, 'AVAILABILITY_UPDATE', { doctorId: req.user!.id });
+        emitEvent('doctors_list', 'AVAILABILITY_UPDATE', { doctorId: req.user!.id }); // For patients searching
+
+        res.status(201).json(slot);
     } catch (error: any) {
         if (error.code === '23505') {
             // Unique constraint violation
@@ -322,6 +365,11 @@ router.delete('/me/availability/:id', async (req: AuthRequest, res: Response) =>
             'DELETE FROM availability_slots WHERE id = $1 AND doctor_id = $2',
             [req.params.id, req.user!.id]
         );
+
+        // Emit socket events
+        const { emitEvent } = require('../config/socket');
+        emitEvent(`user_${req.user!.id}`, 'AVAILABILITY_UPDATE', { doctorId: req.user!.id });
+        emitEvent('doctors_list', 'AVAILABILITY_UPDATE', { doctorId: req.user!.id });
 
         res.json({ message: 'Availability slot deleted' });
     } catch (error) {

@@ -1,21 +1,36 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/auth';
-import { doctorAPI } from '@/lib/api';
-import { FaCalendarAlt, FaUsers, FaCheckCircle, FaClock } from 'react-icons/fa';
+import { doctorAPI, appointmentAPI } from '@/lib/api';
+import { FaCalendarAlt, FaUsers, FaCheckCircle, FaClock, FaVideo } from 'react-icons/fa';
 import Link from 'next/link';
 import GlobalSearch from '@/components/GlobalSearch';
+import { initSocket, disconnectSocket } from '@/lib/socket';
+import VideoCall from '@/components/VideoCall';
+
+const canJoinCall = (appointment: any) => {
+    if (appointment.status !== 'scheduled' && appointment.status !== 'in_progress') return false;
+    const apptDateStr = new Date(appointment.appointment_date).toISOString().split('T')[0];
+    const appointmentDateTime = new Date(`${apptDateStr}T${appointment.start_time}`);
+    const now = new Date();
+    const timeDiff = now.getTime() - appointmentDateTime.getTime();
+    const minutesDiff = timeDiff / (1000 * 60);
+    return minutesDiff >= -15;
+};
 
 export default function DoctorDashboard() {
     const router = useRouter();
-    const { user, isAuthenticated } = useAuthStore();
+    const { user, isAuthenticated, isHydrated } = useAuthStore();
     const [appointments, setAppointments] = useState<any[]>([]);
     const [stats, setStats] = useState({ today: 0, total: 0, completed: 0 });
     const [loading, setLoading] = useState(true);
+    const [activeCall, setActiveCall] = useState<string | null>(null);
 
     useEffect(() => {
+        if (!isHydrated) return;
+
         if (!isAuthenticated || user?.role !== 'doctor') {
             router.push('/auth/login');
             return;
@@ -25,17 +40,69 @@ export default function DoctorDashboard() {
             return;
         }
         fetchData();
+
+        // Socket integration
+        const socket = initSocket(user.id);
+
+        socket.on('appointment_created', (newAppt) => {
+            setAppointments(prev => {
+                const exists = prev.find(a => a.id === newAppt.id);
+                if (exists) return prev;
+                return [newAppt, ...prev]
+                    .filter(a => ['scheduled', 'in_progress'].includes(a.status))
+                    .sort((a, b) => new Date(`${a.appointment_date.split('T')[0]}T${a.start_time}`).getTime() -
+                        new Date(`${b.appointment_date.split('T')[0]}T${b.start_time}`).getTime())
+                    .slice(0, 5);
+            });
+            setStats(prev => ({ ...prev, today: prev.today + 1, total: prev.total + 1 }));
+            fetchData();
+        });
+
+        socket.on('appointment_updated', (updatedAppt) => {
+            setAppointments(prev => {
+                const updated = prev.map(a => a.id === updatedAppt.id ? updatedAppt : a);
+                return updated
+                    .filter(a => ['scheduled', 'in_progress'].includes(a.status))
+                    .sort((a, b) => new Date(`${a.appointment_date.split('T')[0]}T${a.start_time}`).getTime() -
+                        new Date(`${b.appointment_date.split('T')[0]}T${b.start_time}`).getTime())
+                    .slice(0, 5);
+            });
+            if (updatedAppt.status === 'completed') {
+                setStats(prev => ({ ...prev, completed: prev.completed + 1 }));
+            }
+            fetchData();
+        });
+
+        socket.on('appointment_deleted', ({ id }) => {
+            setAppointments(prev => prev.filter(a => a.id !== id));
+            setStats(prev => ({ ...prev, total: prev.total - 1 }));
+            fetchData();
+        });
+
+        return () => {
+            disconnectSocket();
+        };
     }, [isAuthenticated, user]);
 
     const fetchData = async () => {
         try {
-            const response = await doctorAPI.getAppointments();
-            const allAppointments = response.data;
-            setAppointments(allAppointments.slice(0, 5));
+            const profileResponse = await doctorAPI.getProfile();
+            const profile = profileResponse.data;
 
-            const today = new Date().toISOString().split('T')[0];
+            const appointmentsResponse = await doctorAPI.getAppointments();
+            const allAppointments = appointmentsResponse.data;
+
+            const upcoming = allAppointments
+                .filter((a: any) => ['scheduled', 'in_progress'].includes(a.status))
+                .sort((a: any, b: any) =>
+                    new Date(`${a.appointment_date.split('T')[0]}T${a.start_time}`).getTime() -
+                    new Date(`${b.appointment_date.split('T')[0]}T${b.start_time}`).getTime()
+                )
+                .slice(0, 5);
+
+            setAppointments(upcoming);
             setStats({
-                today: allAppointments.filter((a: any) => a.appointment_date.split('T')[0] === today).length,
+                today: profile.today_consultations || 0,
                 total: allAppointments.length,
                 completed: allAppointments.filter((a: any) => a.status === 'completed').length,
             });
@@ -45,6 +112,19 @@ export default function DoctorDashboard() {
             setLoading(false);
         }
     };
+
+    const handleMarkAttended = async (id: string) => {
+        try {
+            await appointmentAPI.markAttendance(id, true);
+        } catch (error) {
+            console.error('Error marking attendance:', error);
+            alert('Failed to mark attendance');
+        }
+    };
+
+    if (activeCall) {
+        return <VideoCall appointmentId={activeCall} onCallEnd={() => setActiveCall(null)} />;
+    }
 
     if (loading) {
         return (
@@ -138,13 +218,39 @@ export default function DoctorDashboard() {
                                                 📅 {new Date(appointment.appointment_date).toLocaleDateString()} at {appointment.start_time}
                                             </p>
                                         </div>
-                                        <span className={`badge ${appointment.status === 'scheduled' ? 'badge-info' :
-                                            appointment.status === 'completed' ? 'badge-success' :
-                                                appointment.status === 'cancelled' ? 'badge-danger' :
-                                                    'badge-warning'
-                                            }`}>
-                                            {appointment.status}
-                                        </span>
+                                        <div className="text-right">
+                                            <span className={`badge ${appointment.status === 'scheduled' ? 'badge-info' :
+                                                appointment.status === 'completed' ? 'badge-success' :
+                                                    appointment.status === 'cancelled' ? 'badge-danger' :
+                                                        appointment.status === 'missed' ? 'bg-orange-100 text-orange-700 border-orange-200' :
+                                                            'badge-warning'
+                                                }`}>
+                                                {appointment.status.charAt(0).toUpperCase() + appointment.status.slice(1)}
+                                            </span>
+                                            <div className="flex flex-col space-y-2 mt-2">
+                                                {canJoinCall(appointment) && (
+                                                    <button
+                                                        onClick={() => setActiveCall(appointment.id)}
+                                                        className="btn btn-primary btn-sm flex items-center justify-center space-x-2"
+                                                    >
+                                                        <FaVideo />
+                                                        <span>Join Call</span>
+                                                    </button>
+                                                )}
+                                                {appointment.status === 'scheduled' && !appointment.doctor_attended && (
+                                                    <button
+                                                        onClick={() => handleMarkAttended(appointment.id)}
+                                                        className="btn btn-outline btn-sm border-green-600 text-green-600 hover:bg-green-50 flex items-center justify-center space-x-2"
+                                                    >
+                                                        <FaCheckCircle />
+                                                        <span>Mark Attended</span>
+                                                    </button>
+                                                )}
+                                                {appointment.doctor_attended && appointment.status !== 'completed' && (
+                                                    <span className="text-xs text-green-600 font-medium italic">Wait for patient to mark attendance</span>
+                                                )}
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             ))}

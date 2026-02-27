@@ -1,0 +1,144 @@
+{
+  "doctors_in_users": [
+    {
+      "id": "692c4ed1-09f6-4ad9-aac7-a2f29cca808f",
+      "email": "dr.sharma@telehealth.com",
+      "role": "doctor",
+      "is_approved": true
+    },
+    {
+      "id": "49e0791b-5581-49f2-a2a3-68c2621aed93",
+      "email": "dr.patel@telehealth.com",
+      "role": "doctor",
+      "is_approved": true
+    },
+    {
+      "id": "2121d37f-0869-45c0-b39a-481d3e14fe4e",
+      "email": "dr.kumar@telehealth.com",
+      "role": "doctor",
+      "is_approved": true
+    },
+    {
+      "id": "d32b3933-8a71-422e-89b6-ab8e49fca8bd",
+      "email": "dr.reddy@telehealth.com",
+      "role": "doctor",
+      "is_approved": true
+    },
+    {
+      "id": "7dc45446-95b8-4845-a527-8295626adb76",
+      "email": "dr.singh@telehealth.com",
+      "role": "doctor",
+      "is_approved": true
+    },
+    {
+      "id": "502b7370-9f51-4b32-887d-1e6df619fe8f",
+      "email": "dr.verma@telehealth.com",
+      "role": "doctor",
+      "is_approved": true
+    }
+  ],
+  "doctor_profiles": [
+    {
+      "id": "a559b3c6-3e6a-407d-b609-9dbf6dead30f",
+      "user_id": "692c4ed1-09f6-4ad9-aac7-a2f29cca808f",
+      "specialization": "Cardiologist",
+      "qualification": "MBBS, MD (Cardiology)",
+      "experience_years": 15,
+      "hospital_name": "Apollo Hospital",
+      "hospital_address": "Jubilee Hills, Hyderabad",
+      "registration_number": "MCI-12345",
+      "bio": "Experienced cardiologist specializing in heart disease prevention and treatment. Available for remote consultations.",
+      "consultation_fee": "800.00",
+      "rating": "4.85",
+      "total_consultations": 110,
+      "created_at": "2026-01-31T16:33:06.891Z",
+      "updated_at": "2026-02-18T07:56:25.058Z",
+      "preferred_languages": "English, Hindi"
+    },
+    {
+      "id": "4eff9cbd-41e5-4d1d-a8cb-aa6ea29a5506",
+      "user_id": "49e0791b-5581-49f2-a2a3-68c2621aed93",
+      "specialization": "General Physician",
+      "qualification": "MBBS, MD (General Medicine)",
+      "experience_years": 10,
+      "hospital_name": "Fortis Hospital",
+      "hospital_address": "Bannerghatta Road, Bangalore",
+      "registration_number": "MCI-23456",
+      "bio": "General physician with expertise in treating common ailments and preventive healthcare.",
+      "consultation_fee": "500.00",
+      "rating": "4.91",
+      "total_consultations": 92,
+      "created_at": "2026-01-31T16:33:07.104Z",
+      "updated_at": "2026-02-18T07:56:25.275Z",
+      "preferred_languages": "English, Hindi"
+    },
+    {
+      "id": "4179e520-0479-47ea-bc3f-d3878ebca774",
+      "user_id": "2121d37f-0869-45c0-b39a-481d3e14fe4e",
+      "specialization": "Pediatrician",
+      "qualification": "MBBS, MD (Pediatrics)",
+      "experience_years": 12,
+      "hospital_name": "Max Healthcare",
+      "hospital_address": "Saket, New Delhi",
+      "registration_number": "MCI-34567",
+      "bio": "Pediatrician specializing in child healthcare and development. Passionate about rural health.",
+      "consultation_fee": "600.00",
+      "rating": "4.52",
+      "total_consultations": 60,
+      "created_at": "2026-01-31T16:33:07.294Z",
+      "updated_at": "2026-02-18T07:56:25.476Z",
+      "preferred_languages": "English, Hindi"
+    },
+    {
+      "id": "904398ea-75da-438a-b591-dc0cda0a145a",
+      "user_id": "d32b3933-8a71-422e-89b6-ab8e49fca8bd",
+      "specialization": "Dermatologist",
+      "qualification": "MBBS, MD (Dermatology)",
+      "experience_years": 8,
+      "hospital_name": "KIMS Hospital",
+      "hospital_address": "Secunderabad, Telangana",
+      "registration_number": "MCI-45678",
+      "bio": "Dermatologist with focus on skin conditions common in rural areas.",
+      "consultation_fee": "700.00",
+      "rating": "4.75",
+      "total_consultations": 93,
+      "created_at": "2026-01-31T16:33:07.473Z",
+      "updated_at": "2026-02-18T07:56:25.681Z",
+      "preferred_languages": "English, Hindi"
+    },
+    {
+      "id": "3752d7b8-1411-429f-b0ae-3eb0461fb03a",
+      "user_id": "7dc45446-95b8-4845-a527-8295626adb76",
+      "specialization": "Neurologist",
+      "qualification": "MBBS, DM (Neurology)",
+      "experience_years": 20,
+      "hospital_name": "Medanta",
+      "hospital_address": "Gurugram, Haryana",
+      "registration_number": "MCI-56789",
+      "bio": "Specialist in neurological disorders with over 20 years of experience.",
+      "consultation_fee": "1000.00",
+      "rating": "4.94",
+      "total_consultations": 119,
+      "created_at": "2026-02-18T06:59:39.871Z",
+      "updated_at": "2026-02-18T07:56:25.899Z",
+      "preferred_languages": "English, Hindi"
+    },
+    {
+      "id": "98297a98-1cfa-45ae-92ff-9eafe1496a62",
+      "user_id": "502b7370-9f51-4b32-887d-1e6df619fe8f",
+      "specialization": "Gynecologist",
+      "qualification": "MBBS, MS (OBG)",
+      "experience_years": 14,
+      "hospital_name": "Cloudnine",
+      "hospital_address": "Mumbai, Maharashtra",
+      "registration_number": "MCI-67890",
+      "bio": "Dedicated to women’s health and wellness throughout all stages of life.",
+      "consultation_fee": "750.00",
+      "rating": "4.92",
+      "total_consultations": 139,
+      "created_at": "2026-02-18T06:59:40.089Z",
+      "updated_at": "2026-02-18T07:56:26.097Z",
+      "preferred_languages": "English, Hindi"
+    }
+  ]
+}

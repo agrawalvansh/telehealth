@@ -6,15 +6,16 @@ import { useAuthStore } from '@/lib/auth';
 import { doctorAPI, appointmentAPI } from '@/lib/api';
 import { FaCalendarAlt, FaClock, FaUserMd } from 'react-icons/fa';
 import Link from 'next/link';
+import { initSocket, disconnectSocket } from '@/lib/socket';
 
 export default function BookAppointmentPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const doctorId = searchParams.get('doctorId');
-    const { user, isAuthenticated } = useAuthStore();
-
+    const { user, isAuthenticated, isHydrated } = useAuthStore();
     const [doctor, setDoctor] = useState<any>(null);
     const [availability, setAvailability] = useState<any[]>([]);
+    const [busySlots, setBusySlots] = useState<any[]>([]);
     const [selectedDate, setSelectedDate] = useState('');
     const [selectedTime, setSelectedTime] = useState('');
     const [symptoms, setSymptoms] = useState('');
@@ -24,6 +25,8 @@ export default function BookAppointmentPage() {
     const [success, setSuccess] = useState(false);
 
     useEffect(() => {
+        if (!isHydrated) return;
+
         if (!isAuthenticated || user?.role !== 'patient') {
             router.push('/auth/login');
             return;
@@ -33,7 +36,26 @@ export default function BookAppointmentPage() {
             return;
         }
         fetchDoctorDetails();
-    }, [isAuthenticated, user, doctorId]);
+
+        // Socket integration
+        const socket = initSocket(user.id);
+
+        socket.on('AVAILABILITY_UPDATE', (data) => {
+            if (data.doctorId === doctorId) {
+                fetchDoctorDetails();
+            }
+        });
+
+        socket.on('appointment_created', (data) => {
+            if (data.doctor_id === doctorId && data.appointment_date === selectedDate) {
+                if (selectedDate) fetchBusySlots(selectedDate);
+            }
+        });
+
+        return () => {
+            // disconnectSocket();
+        };
+    }, [isAuthenticated, user, doctorId, selectedDate]);
 
     const fetchDoctorDetails = async () => {
         try {
@@ -51,16 +73,28 @@ export default function BookAppointmentPage() {
         }
     };
 
+    const fetchBusySlots = async (date: string) => {
+        try {
+            const response = await doctorAPI.getBusySlots(doctorId!, date);
+            setBusySlots(response.data);
+        } catch (error) {
+            console.error('Error fetching busy slots:', error);
+        }
+    };
+
     const getAvailableTimeSlots = () => {
         if (!selectedDate) return [];
 
-        const date = new Date(selectedDate);
-        const dayOfWeek = date.getDay();
+        const dateObj = new Date(selectedDate);
+        const dayOfWeek = dateObj.getDay();
 
         const daySlots = availability.filter((slot) => slot.day_of_week === dayOfWeek && slot.is_available);
 
         // Generate time slots (30-minute intervals)
         const slots: string[] = [];
+        const now = new Date();
+        const isToday = selectedDate === now.toISOString().split('T')[0];
+
         daySlots.forEach((slot) => {
             const [startHour, startMin] = slot.start_time.split(':').map(Number);
             const [endHour, endMin] = slot.end_time.split(':').map(Number);
@@ -70,7 +104,21 @@ export default function BookAppointmentPage() {
 
             while (currentHour < endHour || (currentHour === endHour && currentMin < endMin)) {
                 const timeStr = `${String(currentHour).padStart(2, '0')}:${String(currentMin).padStart(2, '0')}`;
-                slots.push(timeStr);
+
+                // Check if slot is in the past (for today)
+                let isPast = false;
+                if (isToday) {
+                    const slotTime = new Date(`${selectedDate}T${timeStr}`);
+                    if (slotTime < now) isPast = true;
+                }
+
+                // Check if slot is already booked (busy)
+                // We assume slots are 30 mins, so we check if any busy slot overlaps
+                const isBusy = busySlots.some(busy => busy.start_time === timeStr || (busy.start_time <= timeStr && busy.end_time > timeStr));
+
+                if (!isPast && !isBusy) {
+                    slots.push(timeStr);
+                }
 
                 currentMin += 30;
                 if (currentMin >= 60) {
@@ -80,7 +128,7 @@ export default function BookAppointmentPage() {
             }
         });
 
-        return slots;
+        return Array.from(new Set(slots)).sort(); // Remove duplicates and sort
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -201,8 +249,10 @@ export default function BookAppointmentPage() {
                                 max={maxDateStr}
                                 value={selectedDate}
                                 onChange={(e) => {
-                                    setSelectedDate(e.target.value);
+                                    const date = e.target.value;
+                                    setSelectedDate(date);
                                     setSelectedTime('');
+                                    if (date) fetchBusySlots(date);
                                 }}
                             />
                         </div>

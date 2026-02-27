@@ -6,10 +6,11 @@ import { useAuthStore } from '@/lib/auth';
 import { doctorAPI } from '@/lib/api';
 import { FaSearch, FaStar, FaUserMd, FaHospital, FaCalendarPlus } from 'react-icons/fa';
 import Link from 'next/link';
+import { initSocket, disconnectSocket } from '@/lib/socket';
 
 export default function DoctorsPage() {
     const router = useRouter();
-    const { user, isAuthenticated } = useAuthStore();
+    const { user, isAuthenticated, isHydrated } = useAuthStore();
     const [doctors, setDoctors] = useState<any[]>([]);
     const [filteredDoctors, setFilteredDoctors] = useState<any[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
@@ -18,11 +19,26 @@ export default function DoctorsPage() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        if (!isHydrated) return;
+
         if (!isAuthenticated || user?.role !== 'patient') {
             router.push('/auth/login');
             return;
         }
         fetchDoctors();
+
+        // Socket integration
+        const socket = initSocket(user.id);
+        socket.on('AVAILABILITY_UPDATE', () => {
+            fetchDoctors();
+        });
+        socket.on('DOCTOR_UPDATED', () => {
+            fetchDoctors();
+        });
+
+        return () => {
+            // disconnectSocket();
+        };
     }, [isAuthenticated, user]);
 
     const fetchDoctors = async () => {
@@ -95,20 +111,48 @@ export default function DoctorsPage() {
                 {/* Search and Filters */}
                 <div className="card mb-8">
                     <div className="grid md:grid-cols-2 gap-4">
-                        {/* Search */}
-                        <div>
+                        {/* Searchable Dropdown */}
+                        <div className="relative group">
                             <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Search Doctors
+                                Find a Doctor
                             </label>
                             <div className="relative">
-                                <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                                <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
                                 <input
                                     type="text"
-                                    placeholder="Search by name or specialty..."
-                                    className="input pl-10"
+                                    placeholder="Type name or specialty..."
+                                    className="input pl-10 focus:ring-2 focus:ring-primary-500 transition-all"
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                 />
+
+                                {searchTerm && (
+                                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-64 overflow-y-auto overflow-x-hidden animate-in fade-in slide-in-from-top-2">
+                                        {filteredDoctors.length > 0 ? (
+                                            filteredDoctors.map(doctor => (
+                                                <div
+                                                    key={doctor.id}
+                                                    onClick={() => {
+                                                        setSearchTerm(`Dr. ${doctor.first_name} ${doctor.last_name}`);
+                                                        // Optionally scroll to or highlight the doctor card below
+                                                    }}
+                                                    className="p-3 hover:bg-blue-50 cursor-pointer border-b last:border-0 flex items-center justify-between"
+                                                >
+                                                    <div>
+                                                        <div className="font-semibold text-gray-900">Dr. {doctor.first_name} {doctor.last_name}</div>
+                                                        <div className="text-xs text-primary-600">{doctor.specialization}</div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <div className="text-xs font-bold text-green-600">₹{doctor.consultation_fee}</div>
+                                                        <div className="text-[10px] text-gray-500">{doctor.experience_years}y Exp.</div>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <div className="p-4 text-center text-gray-500 text-sm">No doctors matching "{searchTerm}"</div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         </div>
 

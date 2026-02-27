@@ -6,6 +6,7 @@ import { useAuthStore } from '@/lib/auth';
 import { doctorAPI } from '@/lib/api';
 import { FaClock, FaPlus, FaTrash } from 'react-icons/fa';
 import Link from 'next/link';
+import { initSocket, disconnectSocket } from '@/lib/socket';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -27,6 +28,21 @@ export default function AvailabilityPage() {
             return;
         }
         fetchAvailability();
+
+        // Socket integration for real-time sync
+        const socket = initSocket(user.id);
+
+        socket.on('AVAILABILITY_UPDATE', (data) => {
+            if (data.doctorId === user.id) {
+                fetchAvailability();
+            }
+        });
+
+        return () => {
+            // We don't necessarily want to disconnect here if the user is still logged in
+            // but for safety in this demo/system, we can.
+            // disconnectSocket(); 
+        };
     }, [isAuthenticated, user]);
 
     const fetchAvailability = async () => {
