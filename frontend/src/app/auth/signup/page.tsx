@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -91,8 +93,8 @@ export default function SignupPage() {
                         type="button"
                         onClick={() => setRole('patient')}
                         className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all ${role === 'patient'
-                                ? 'bg-gradient-to-r from-primary-600 to-primary-700 text-white shadow-md'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            ? 'bg-gradient-to-r from-primary-600 to-primary-700 text-white shadow-md'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                             }`}
                     >
                         I'm a Patient
@@ -101,8 +103,8 @@ export default function SignupPage() {
                         type="button"
                         onClick={() => setRole('doctor')}
                         className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all ${role === 'doctor'
-                                ? 'bg-gradient-to-r from-secondary-600 to-secondary-700 text-white shadow-md'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            ? 'bg-gradient-to-r from-secondary-600 to-secondary-700 text-white shadow-md'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                             }`}
                     >
                         I'm a Doctor
