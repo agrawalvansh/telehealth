@@ -4,9 +4,13 @@ import { Server as HttpServer } from 'http';
 let io: Server;
 
 export const initSocket = (server: HttpServer) => {
+    const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:3000')
+        .split(',')
+        .map(url => url.trim());
+
     io = new Server(server, {
         cors: {
-            origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+            origin: allowedOrigins,
             credentials: true,
         },
     });
