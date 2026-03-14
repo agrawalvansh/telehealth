@@ -4,7 +4,7 @@ const SOCKET_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 let socket: Socket;
 
-export const initSocket = (userId: string) => {
+export const initSocket = (userId: string, userRole?: string) => {
     if (socket) return socket;
 
     socket = io(SOCKET_URL, {
@@ -15,7 +15,7 @@ export const initSocket = (userId: string) => {
         console.log('🔌 Connected to socket server');
         socket.emit('join', `user_${userId}`);
         socket.emit('join', 'doctors_list'); // Room for global doctor list updates
-        if (userId.includes('doctor')) { // Simplistic check, role based is better
+        if (userRole === 'doctor') {
             socket.emit('join', 'doctors');
         }
     });

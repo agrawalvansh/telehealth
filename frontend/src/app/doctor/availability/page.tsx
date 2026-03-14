@@ -30,7 +30,7 @@ export default function AvailabilityPage() {
         fetchAvailability();
 
         // Socket integration for real-time sync
-        const socket = initSocket(user.id);
+        const socket = initSocket(user.id, user.role);
 
         socket.on('AVAILABILITY_UPDATE', (data) => {
             if (data.doctorId === user.id) {

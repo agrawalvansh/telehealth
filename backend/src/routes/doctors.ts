@@ -56,6 +56,280 @@ router.get('/', async (req, res: Response) => {
     }
 });
 
+// ============================================================
+// PROTECTED ROUTES — must be defined BEFORE /:id wildcard routes
+// to prevent Express from matching "me" as an :id parameter
+// ============================================================
+router.use('/me', authenticateToken);
+router.use('/me', authorizeRoles('doctor'));
+
+/**
+ * @swagger
+ * /api/doctors/me/profile:
+ *   get:
+ *     summary: Get doctor's own profile
+ *     tags: [Doctors]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get('/me/profile', async (req: AuthRequest, res: Response) => {
+    try {
+        const result = await pool.query(
+            `SELECT u.id, u.email, u.first_name, u.last_name, u.phone, u.is_approved,
+              dp.specialization, dp.qualification, dp.experience_years,
+              dp.hospital_name, dp.hospital_address, dp.registration_number,
+              dp.bio, dp.consultation_fee, dp.rating, dp.total_consultations,
+              dp.preferred_languages
+       FROM users u
+       JOIN doctor_profiles dp ON u.id = dp.user_id
+       WHERE u.id = $1`,
+            [req.user!.id]
+        );
+
+        const todayConsultations = await pool.query(
+            "SELECT COUNT(*) FROM appointments WHERE doctor_id = $1 AND status = 'completed' AND appointment_date = CURRENT_DATE",
+            [req.user!.id]
+        );
+
+        const profile = result.rows[0];
+        profile.today_consultations = parseInt(todayConsultations.rows[0].count);
+
+        res.json(profile);
+    } catch (error) {
+        console.error('Error fetching doctor profile:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+/**
+ * @swagger
+ * /api/doctors/me/profile:
+ *   put:
+ *     summary: Update doctor profile
+ *     tags: [Doctors]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.put('/me/profile', async (req: AuthRequest, res: Response) => {
+    const {
+        firstName,
+        lastName,
+        phone,
+        specialization,
+        qualification,
+        experienceYears,
+        hospitalName,
+        hospitalAddress,
+        registrationNumber,
+        bio,
+        consultationFee,
+        preferredLanguages,
+    } = req.body;
+
+    try {
+        // Update users table
+        await pool.query(
+            `UPDATE users 
+       SET first_name = COALESCE($1, first_name),
+           last_name = COALESCE($2, last_name),
+           phone = COALESCE($3, phone)
+       WHERE id = $4`,
+            [firstName, lastName, phone, req.user!.id]
+        );
+
+        // Update doctor_profiles table
+        await pool.query(
+            `UPDATE doctor_profiles
+       SET specialization = COALESCE($1, specialization),
+           qualification = COALESCE($2, qualification),
+           experience_years = COALESCE($3, experience_years),
+           hospital_name = COALESCE($4, hospital_name),
+           hospital_address = COALESCE($5, hospital_address),
+           registration_number = COALESCE($6, registration_number),
+           bio = COALESCE($7, bio),
+           consultation_fee = COALESCE($8, consultation_fee),
+           preferred_languages = COALESCE($9, preferred_languages)
+       WHERE user_id = $10`,
+            [
+                specialization,
+                qualification,
+                experienceYears,
+                hospitalName,
+                hospitalAddress,
+                registrationNumber,
+                bio,
+                consultationFee,
+                preferredLanguages,
+                req.user!.id,
+            ]
+        );
+
+        // Emit socket events
+        const { emitEvent } = require('../config/socket');
+        emitEvent(`user_${req.user!.id}`, 'DOCTOR_UPDATED', { doctorId: req.user!.id });
+        emitEvent('doctors_list', 'DOCTOR_UPDATED', { doctorId: req.user!.id });
+
+        res.json({ message: 'Profile updated successfully' });
+    } catch (error) {
+        console.error('Error updating doctor profile:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+/**
+ * @swagger
+ * /api/doctors/me/appointments:
+ *   get:
+ *     summary: Get doctor's appointments
+ *     tags: [Doctors]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get('/me/appointments', async (req: AuthRequest, res: Response) => {
+    try {
+        const result = await pool.query(
+            `SELECT a.*, 
+              p.first_name as patient_first_name,
+              p.last_name as patient_last_name,
+              p.phone as patient_phone,
+              pp.date_of_birth, pp.blood_group, pp.allergies, pp.chronic_conditions
+       FROM appointments a
+       JOIN users p ON a.patient_id = p.id
+       LEFT JOIN patient_profiles pp ON p.id = pp.user_id
+       WHERE a.doctor_id = $1
+       ORDER BY a.appointment_date DESC, a.start_time DESC`,
+            [req.user!.id]
+        );
+
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Error fetching appointments:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+/**
+ * @swagger
+ * /api/doctors/me/availability:
+ *   get:
+ *     summary: Get doctor's availability slots
+ *     tags: [Doctors]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get('/me/availability', async (req: AuthRequest, res: Response) => {
+    try {
+        const result = await pool.query(
+            `SELECT * FROM availability_slots
+       WHERE doctor_id = $1
+       ORDER BY day_of_week, start_time`,
+            [req.user!.id]
+        );
+
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Error fetching availability:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+/**
+ * @swagger
+ * /api/doctors/me/availability:
+ *   post:
+ *     summary: Add availability slot
+ *     tags: [Doctors]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.post('/me/availability', async (req: AuthRequest, res: Response) => {
+    const { dayOfWeek, startTime, endTime } = req.body;
+
+    try {
+        const result = await pool.query(
+            `INSERT INTO availability_slots (doctor_id, day_of_week, start_time, end_time)
+       VALUES ($1, $2, $3, $4)
+       RETURNING *`,
+            [req.user!.id, dayOfWeek, startTime, endTime]
+        );
+
+        const slot = result.rows[0];
+
+        // Emit socket events
+        const { emitEvent } = require('../config/socket');
+        emitEvent(`user_${req.user!.id}`, 'AVAILABILITY_UPDATE', { doctorId: req.user!.id });
+        emitEvent('doctors_list', 'AVAILABILITY_UPDATE', { doctorId: req.user!.id }); // For patients searching
+
+        res.status(201).json(slot);
+    } catch (error: any) {
+        if (error.code === '23505') {
+            // Unique constraint violation
+            return res.status(400).json({ error: 'Slot already exists' });
+        }
+        console.error('Error adding availability:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+/**
+ * @swagger
+ * /api/doctors/me/availability/{id}:
+ *   delete:
+ *     summary: Delete availability slot
+ *     tags: [Doctors]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.delete('/me/availability/:id', async (req: AuthRequest, res: Response) => {
+    try {
+        await pool.query(
+            'DELETE FROM availability_slots WHERE id = $1 AND doctor_id = $2',
+            [req.params.id, req.user!.id]
+        );
+
+        // Emit socket events
+        const { emitEvent } = require('../config/socket');
+        emitEvent(`user_${req.user!.id}`, 'AVAILABILITY_UPDATE', { doctorId: req.user!.id });
+        emitEvent('doctors_list', 'AVAILABILITY_UPDATE', { doctorId: req.user!.id });
+
+        res.json({ message: 'Availability slot deleted' });
+    } catch (error) {
+        console.error('Error deleting availability:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+/**
+ * @swagger
+ * /api/doctors/patient-history/{patientId}:
+ *   get:
+ *     summary: Get patient's medical history (for doctor)
+ *     tags: [Doctors]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get('/patient-history/:patientId', authenticateToken, authorizeRoles('doctor') as any, async (req: AuthRequest, res: Response) => {
+    try {
+        const result = await pool.query(
+            `SELECT mr.*, p.medications, p.instructions as prescription_instructions
+       FROM medical_records mr
+       LEFT JOIN prescriptions p ON mr.id = p.medical_record_id
+       WHERE mr.patient_id = $1
+       ORDER BY mr.created_at DESC`,
+            [req.params.patientId]
+        );
+
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Error fetching patient history:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// ============================================================
+// PUBLIC ROUTES with :id parameter — AFTER /me/* routes
+// ============================================================
+
 /**
  * @swagger
  * /api/doctors/{id}:
@@ -134,273 +408,6 @@ router.get('/:id/busy-slots', async (req, res: Response) => {
         res.json(result.rows);
     } catch (error) {
         console.error('Error fetching busy slots:', error);
-        res.status(500).json({ error: 'Server error' });
-    }
-});
-
-// Protected routes - require doctor authentication
-router.use(authenticateToken);
-router.use(authorizeRoles('doctor'));
-
-/**
- * @swagger
- * /api/doctors/profile:
- *   get:
- *     summary: Get doctor's own profile
- *     tags: [Doctors]
- *     security:
- *       - bearerAuth: []
- */
-router.get('/me/profile', async (req: AuthRequest, res: Response) => {
-    try {
-        const result = await pool.query(
-            `SELECT u.id, u.email, u.first_name, u.last_name, u.phone, u.is_approved,
-              dp.specialization, dp.qualification, dp.experience_years,
-              dp.hospital_name, dp.hospital_address, dp.registration_number,
-              dp.bio, dp.consultation_fee, dp.rating, dp.total_consultations,
-              dp.preferred_languages
-       FROM users u
-       JOIN doctor_profiles dp ON u.id = dp.user_id
-       WHERE u.id = $1`,
-            [req.user!.id]
-        );
-
-        const todayConsultations = await pool.query(
-            "SELECT COUNT(*) FROM appointments WHERE doctor_id = $1 AND status = 'completed' AND appointment_date = CURRENT_DATE",
-            [req.user!.id]
-        );
-
-        const profile = result.rows[0];
-        profile.today_consultations = parseInt(todayConsultations.rows[0].count);
-
-        res.json(profile);
-    } catch (error) {
-        console.error('Error fetching doctor profile:', error);
-        res.status(500).json({ error: 'Server error' });
-    }
-});
-
-/**
- * @swagger
- * /api/doctors/profile:
- *   put:
- *     summary: Update doctor profile
- *     tags: [Doctors]
- *     security:
- *       - bearerAuth: []
- */
-router.put('/me/profile', async (req: AuthRequest, res: Response) => {
-    const {
-        firstName,
-        lastName,
-        phone,
-        specialization,
-        qualification,
-        experienceYears,
-        hospitalName,
-        hospitalAddress,
-        registrationNumber,
-        bio,
-        consultationFee,
-        preferredLanguages,
-    } = req.body;
-
-    try {
-        // Update users table
-        await pool.query(
-            `UPDATE users 
-       SET first_name = COALESCE($1, first_name),
-           last_name = COALESCE($2, last_name),
-           phone = COALESCE($3, phone)
-       WHERE id = $4`,
-            [firstName, lastName, phone, req.user!.id]
-        );
-
-        // Update doctor_profiles table
-        await pool.query(
-            `UPDATE doctor_profiles
-       SET specialization = COALESCE($1, specialization),
-           qualification = COALESCE($2, qualification),
-           experience_years = COALESCE($3, experience_years),
-           hospital_name = COALESCE($4, hospital_name),
-           hospital_address = COALESCE($5, hospital_address),
-           registration_number = COALESCE($6, registration_number),
-           bio = COALESCE($7, bio),
-           consultation_fee = COALESCE($8, consultation_fee),
-           preferred_languages = COALESCE($9, preferred_languages)
-       WHERE user_id = $10`,
-            [
-                specialization,
-                qualification,
-                experienceYears,
-                hospitalName,
-                hospitalAddress,
-                registrationNumber,
-                bio,
-                consultationFee,
-                preferredLanguages,
-                req.user!.id,
-            ]
-        );
-
-        // Emit socket events
-        const { emitEvent } = require('../config/socket');
-        emitEvent(`user_${req.user!.id}`, 'DOCTOR_UPDATED', { doctorId: req.user!.id });
-        emitEvent('doctors_list', 'DOCTOR_UPDATED', { doctorId: req.user!.id });
-
-        res.json({ message: 'Profile updated successfully' });
-    } catch (error) {
-        console.error('Error updating doctor profile:', error);
-        res.status(500).json({ error: 'Server error' });
-    }
-});
-
-/**
- * @swagger
- * /api/doctors/appointments:
- *   get:
- *     summary: Get doctor's appointments
- *     tags: [Doctors]
- *     security:
- *       - bearerAuth: []
- */
-router.get('/me/appointments', async (req: AuthRequest, res: Response) => {
-    try {
-        const result = await pool.query(
-            `SELECT a.*, 
-              p.first_name as patient_first_name,
-              p.last_name as patient_last_name,
-              p.phone as patient_phone,
-              pp.date_of_birth, pp.blood_group, pp.allergies, pp.chronic_conditions
-       FROM appointments a
-       JOIN users p ON a.patient_id = p.id
-       LEFT JOIN patient_profiles pp ON p.id = pp.user_id
-       WHERE a.doctor_id = $1
-       ORDER BY a.appointment_date DESC, a.start_time DESC`,
-            [req.user!.id]
-        );
-
-        res.json(result.rows);
-    } catch (error) {
-        console.error('Error fetching appointments:', error);
-        res.status(500).json({ error: 'Server error' });
-    }
-});
-
-/**
- * @swagger
- * /api/doctors/availability:
- *   get:
- *     summary: Get doctor's availability slots
- *     tags: [Doctors]
- *     security:
- *       - bearerAuth: []
- */
-router.get('/me/availability', async (req: AuthRequest, res: Response) => {
-    try {
-        const result = await pool.query(
-            `SELECT * FROM availability_slots
-       WHERE doctor_id = $1
-       ORDER BY day_of_week, start_time`,
-            [req.user!.id]
-        );
-
-        res.json(result.rows);
-    } catch (error) {
-        console.error('Error fetching availability:', error);
-        res.status(500).json({ error: 'Server error' });
-    }
-});
-
-/**
- * @swagger
- * /api/doctors/availability:
- *   post:
- *     summary: Add availability slot
- *     tags: [Doctors]
- *     security:
- *       - bearerAuth: []
- */
-router.post('/me/availability', async (req: AuthRequest, res: Response) => {
-    const { dayOfWeek, startTime, endTime } = req.body;
-
-    try {
-        const result = await pool.query(
-            `INSERT INTO availability_slots (doctor_id, day_of_week, start_time, end_time)
-       VALUES ($1, $2, $3, $4)
-       RETURNING *`,
-            [req.user!.id, dayOfWeek, startTime, endTime]
-        );
-
-        const slot = result.rows[0];
-
-        // Emit socket events
-        const { emitEvent } = require('../config/socket');
-        emitEvent(`user_${req.user!.id}`, 'AVAILABILITY_UPDATE', { doctorId: req.user!.id });
-        emitEvent('doctors_list', 'AVAILABILITY_UPDATE', { doctorId: req.user!.id }); // For patients searching
-
-        res.status(201).json(slot);
-    } catch (error: any) {
-        if (error.code === '23505') {
-            // Unique constraint violation
-            return res.status(400).json({ error: 'Slot already exists' });
-        }
-        console.error('Error adding availability:', error);
-        res.status(500).json({ error: 'Server error' });
-    }
-});
-
-/**
- * @swagger
- * /api/doctors/availability/{id}:
- *   delete:
- *     summary: Delete availability slot
- *     tags: [Doctors]
- *     security:
- *       - bearerAuth: []
- */
-router.delete('/me/availability/:id', async (req: AuthRequest, res: Response) => {
-    try {
-        await pool.query(
-            'DELETE FROM availability_slots WHERE id = $1 AND doctor_id = $2',
-            [req.params.id, req.user!.id]
-        );
-
-        // Emit socket events
-        const { emitEvent } = require('../config/socket');
-        emitEvent(`user_${req.user!.id}`, 'AVAILABILITY_UPDATE', { doctorId: req.user!.id });
-        emitEvent('doctors_list', 'AVAILABILITY_UPDATE', { doctorId: req.user!.id });
-
-        res.json({ message: 'Availability slot deleted' });
-    } catch (error) {
-        console.error('Error deleting availability:', error);
-        res.status(500).json({ error: 'Server error' });
-    }
-});
-
-/**
- * @swagger
- * /api/doctors/patient-history/{patientId}:
- *   get:
- *     summary: Get patient's medical history (for doctor)
- *     tags: [Doctors]
- *     security:
- *       - bearerAuth: []
- */
-router.get('/patient-history/:patientId', async (req: AuthRequest, res: Response) => {
-    try {
-        const result = await pool.query(
-            `SELECT mr.*, p.medications, p.instructions as prescription_instructions
-       FROM medical_records mr
-       LEFT JOIN prescriptions p ON mr.id = p.medical_record_id
-       WHERE mr.patient_id = $1
-       ORDER BY mr.created_at DESC`,
-            [req.params.patientId]
-        );
-
-        res.json(result.rows);
-    } catch (error) {
-        console.error('Error fetching patient history:', error);
         res.status(500).json({ error: 'Server error' });
     }
 });

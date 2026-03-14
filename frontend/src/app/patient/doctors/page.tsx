@@ -28,7 +28,7 @@ export default function DoctorsPage() {
         fetchDoctors();
 
         // Socket integration
-        const socket = initSocket(user.id);
+        const socket = initSocket(user.id, user.role);
         socket.on('AVAILABILITY_UPDATE', () => {
             fetchDoctors();
         });

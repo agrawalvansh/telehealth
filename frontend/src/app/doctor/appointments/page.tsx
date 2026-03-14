@@ -48,7 +48,7 @@ export default function DoctorAppointmentsPage() {
         fetchAppointments();
 
         // Socket integration
-        const socket = initSocket(user.id);
+        const socket = initSocket(user.id, user.role);
 
         socket.on('appointment_created', (newAppt) => {
             setAppointments(prev => {

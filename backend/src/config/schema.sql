@@ -50,6 +50,7 @@ CREATE TABLE doctor_profiles (
     consultation_fee DECIMAL(10, 2),
     rating DECIMAL(3, 2) DEFAULT 0.00,
     total_consultations INTEGER DEFAULT 0,
+    preferred_languages TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -74,7 +75,7 @@ CREATE TABLE appointments (
     appointment_date DATE NOT NULL,
     start_time TIME NOT NULL,
     end_time TIME NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'in_progress', 'completed', 'cancelled')),
+    status VARCHAR(20) NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'in_progress', 'completed', 'cancelled', 'missed')),
     symptoms TEXT,
     cancellation_reason TEXT,
     video_channel_name VARCHAR(255), -- For Agora video calls

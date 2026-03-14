@@ -40,7 +40,7 @@ function BookAppointmentContent() {
         fetchDoctorDetails();
 
         // Socket integration
-        const socket = initSocket(user.id);
+        const socket = initSocket(user.id, user.role);
 
         socket.on('AVAILABILITY_UPDATE', (data) => {
             if (data.doctorId === doctorId) {
